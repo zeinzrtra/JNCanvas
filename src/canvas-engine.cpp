@@ -197,28 +197,28 @@ void CanvasEngine::render(uint32_t cx, uint32_t cy) {
 
 extern "C" {
 
-bool jn_canvas_is_active(void) {
+JN_CANVAS_EXPORT bool jn_canvas_is_active(void) {
     return CanvasEngine::instance().is_active();
 }
 
-obs_view_t *jn_canvas_get_view(void) {
+JN_CANVAS_EXPORT obs_view_t *jn_canvas_get_view(void) {
     return CanvasEngine::instance().view();
 }
 
-obs_source_t *jn_canvas_get_output_source(void) {
+JN_CANVAS_EXPORT obs_source_t *jn_canvas_get_output_source(void) {
     return CanvasEngine::instance().output_source();
 }
 
-void jn_canvas_get_resolution(uint32_t *width, uint32_t *height) {
+JN_CANVAS_EXPORT void jn_canvas_get_resolution(uint32_t *width, uint32_t *height) {
     if (width) *width = CanvasEngine::instance().width();
     if (height) *height = CanvasEngine::instance().height();
 }
 
-obs_scene_t *jn_canvas_get_current_scene(void) {
+JN_CANVAS_EXPORT obs_scene_t *jn_canvas_get_current_scene(void) {
     return CanvasEngine::instance().current_scene();
 }
 
-bool jn_canvas_clone_source_to_scene(obs_source_t *source, const char *target_scene_name) {
+JN_CANVAS_EXPORT bool jn_canvas_clone_source_to_scene(obs_source_t *source, const char *target_scene_name) {
     if (!source || !target_scene_name) return false;
     return CanvasEngine::instance().clone_source_to_scene(source, target_scene_name);
 }

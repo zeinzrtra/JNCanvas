@@ -23,7 +23,11 @@ void CanvasDisplayWidget::create_display() {
     info.cy = height();
     info.format = GS_RGBA;
     info.zsformat = GS_ZS_NONE;
+#ifdef _WIN32
+    info.window.hwnd = (HWND)(uintptr_t)winId();
+#else
     info.window.id = (void *)(uintptr_t)winId();
+#endif
 
     display_ = obs_display_create(&info, 0x00000000);
     if (display_) {

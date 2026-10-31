@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(disable: 4996)
+#endif
+
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QMainWindow>
