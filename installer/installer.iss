@@ -4,6 +4,10 @@
 #define MyAppURL "https://github.com/zeinzrtra/JNCanvas"
 #define MyAppExeName "obs64.exe"
 
+#ifndef Configuration
+#define Configuration "RelWithDebInfo"
+#endif
+
 [Setup]
 AppId={{E6D012C4-8F7B-4A12-B2D3-3D4F5A6B7C8D}}
 AppName={#MyAppName}
@@ -30,10 +34,8 @@ PrivilegesRequired=admin
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; Look in standard release output from OBS template build
-Source: "..\release\*\jn-canvas\bin\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
-Source: "..\release\*\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\package\obs-plugins\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion skipifsourcedoesntexist
+; Copy plugin dll directly from the build configuration directory
+Source: "..\release\{#Configuration}\jn-canvas\bin\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
 
 [Code]
 function InitializeSetup(): Boolean;

@@ -73,7 +73,7 @@ function Package {
     if (Test-Path $InnoCompiler) {
         Log-Group 'Building Windows .exe Installer with Inno Setup...'
         $IssPath = "$ProjectRoot\installer\installer.iss"
-        & $InnoCompiler $IssPath
+        & $InnoCompiler "/DConfiguration=$Configuration" $IssPath
         Log-Group
     }
 }
