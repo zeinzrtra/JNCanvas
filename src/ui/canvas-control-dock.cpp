@@ -10,7 +10,7 @@
 #include <QMessageBox>
 
 CanvasControlDock::CanvasControlDock(QWidget *parent)
-    : QDockWidget(tr("Canvas 2"), parent) {
+    : QWidget(parent) {
     setObjectName("JNCanvasControlDock");
     setup_ui();
     setup_stylesheet();
@@ -19,8 +19,7 @@ CanvasControlDock::CanvasControlDock(QWidget *parent)
 }
 
 void CanvasControlDock::setup_ui() {
-    QWidget *main_widget = new QWidget(this);
-    QVBoxLayout *main_layout = new QVBoxLayout(main_widget);
+    QVBoxLayout *main_layout = new QVBoxLayout(this);
     main_layout->setContentsMargins(6, 6, 6, 6);
     main_layout->setSpacing(4);
 
@@ -30,12 +29,12 @@ void CanvasControlDock::setup_ui() {
     QHBoxLayout *header_layout = new QHBoxLayout();
     header_layout->setContentsMargins(0, 0, 0, 0);
 
-    selected_source_label_ = new QLabel(tr("No source selected"), main_widget);
+    selected_source_label_ = new QLabel(tr("No source selected"), this);
     selected_source_label_->setStyleSheet("font-weight: bold; font-size: 13px; color: #cfd6df;");
 
-    btn_properties_ = new QPushButton(tr("⚙ Properties"), main_widget);
+    btn_properties_ = new QPushButton(tr("⚙ Properties"), this);
     btn_properties_->setObjectName("headerBtn");
-    btn_filters_ = new QPushButton(tr("🎨 Filters"), main_widget);
+    btn_filters_ = new QPushButton(tr("🎨 Filters"), this);
     btn_filters_->setObjectName("headerBtn");
 
     header_layout->addWidget(selected_source_label_, 1);
@@ -46,7 +45,7 @@ void CanvasControlDock::setup_ui() {
     // ========================================================================
     // 2. Central Content (Stacked: Scenes & Sources Lists)
     // ========================================================================
-    stacked_content_ = new QStackedWidget(main_widget);
+    stacked_content_ = new QStackedWidget(this);
 
     // Scene List Page
     scene_list_widget_ = new QListWidget(stacked_content_);
@@ -76,15 +75,15 @@ void CanvasControlDock::setup_ui() {
     action_bar_layout->setContentsMargins(0, 2, 0, 2);
     action_bar_layout->setSpacing(4);
 
-    btn_add_ = new QPushButton("+", main_widget);
+    btn_add_ = new QPushButton("+", this);
     btn_add_->setFixedSize(28, 24);
-    btn_delete_ = new QPushButton("🗑", main_widget);
+    btn_delete_ = new QPushButton("🗑", this);
     btn_delete_->setFixedSize(28, 24);
-    btn_item_props_ = new QPushButton("⚙", main_widget);
+    btn_item_props_ = new QPushButton("⚙", this);
     btn_item_props_->setFixedSize(28, 24);
-    btn_move_up_ = new QPushButton("▲", main_widget);
+    btn_move_up_ = new QPushButton("▲", this);
     btn_move_up_->setFixedSize(28, 24);
-    btn_move_down_ = new QPushButton("▼", main_widget);
+    btn_move_down_ = new QPushButton("▼", this);
     btn_move_down_->setFixedSize(28, 24);
 
     action_bar_layout->addWidget(btn_add_);
@@ -95,9 +94,9 @@ void CanvasControlDock::setup_ui() {
     action_bar_layout->addStretch(1);
 
     // Quick Record & Backtrack Action Buttons
-    btn_record_ = new QPushButton(tr("⏺ REC"), main_widget);
+    btn_record_ = new QPushButton(tr("⏺ REC"), this);
     btn_record_->setObjectName("recBtn");
-    btn_backtrack_ = new QPushButton(tr("⚡ CLIP"), main_widget);
+    btn_backtrack_ = new QPushButton(tr("⚡ CLIP"), this);
     btn_backtrack_->setObjectName("clipBtn");
 
     action_bar_layout->addWidget(btn_record_);
@@ -108,7 +107,7 @@ void CanvasControlDock::setup_ui() {
     // ========================================================================
     // 4. Bottom Tab Bar ([Scenes] [Sources])
     // ========================================================================
-    bottom_tab_bar_ = new QTabBar(main_widget);
+    bottom_tab_bar_ = new QTabBar(this);
     bottom_tab_bar_->addTab(tr("Scenes"));
     bottom_tab_bar_->addTab(tr("Sources"));
     bottom_tab_bar_->setCurrentIndex(1); // Default to Sources tab
@@ -116,8 +115,6 @@ void CanvasControlDock::setup_ui() {
 
     connect(bottom_tab_bar_, &QTabBar::currentChanged, this, &CanvasControlDock::on_tab_changed);
     main_layout->addWidget(bottom_tab_bar_);
-
-    setWidget(main_widget);
 
     // Connect button signals
     connect(btn_add_, &QPushButton::clicked, this, &CanvasControlDock::on_add_clicked);

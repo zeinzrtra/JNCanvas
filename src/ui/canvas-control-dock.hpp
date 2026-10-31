@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QDockWidget>
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
@@ -9,7 +8,7 @@
 #include <QTabBar>
 #include <obs.h>
 
-class CanvasControlDock : public QDockWidget {
+class CanvasControlDock : public QWidget {
     Q_OBJECT
 public:
     explicit CanvasControlDock(QWidget *parent = nullptr);

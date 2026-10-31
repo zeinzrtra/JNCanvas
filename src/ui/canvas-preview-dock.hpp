@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QDockWidget>
 #include <QWidget>
 #include <obs.h>
 
@@ -24,7 +23,7 @@ private:
     static void render_display(void *data, uint32_t cx, uint32_t cy);
 };
 
-class CanvasPreviewDock : public QDockWidget {
+class CanvasPreviewDock : public QWidget {
     Q_OBJECT
 public:
     explicit CanvasPreviewDock(QWidget *parent = nullptr);

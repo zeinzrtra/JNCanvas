@@ -1,7 +1,3 @@
-#ifdef _MSC_VER
-#pragma warning(disable: 4996)
-#endif
-
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QMainWindow>
@@ -30,13 +26,19 @@ static void on_frontend_event(enum obs_frontend_event event, void *private_data)
         QMainWindow *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
         if (!main_win) return;
 
-        // Create Preview Dock (can be placed on left, right, or top)
+        // Create Preview Dock (can be placed on left, right, top, or floating)
         preview_dock = new CanvasPreviewDock(main_win);
-        obs_frontend_add_dock(preview_dock);
+        obs_frontend_add_dock_by_id("JNCanvasPreviewDock", "Canvas 2 - Preview", preview_dock);
+        if (preview_dock->parentWidget()) {
+            preview_dock->parentWidget()->setVisible(true);
+        }
 
         // Create Control Dock (Canvas 2 Tabbed Scenes & Sources)
         control_dock = new CanvasControlDock(main_win);
-        obs_frontend_add_dock(control_dock);
+        obs_frontend_add_dock_by_id("JNCanvasControlDock", "Canvas 2", control_dock);
+        if (control_dock->parentWidget()) {
+            control_dock->parentWidget()->setVisible(true);
+        }
 
         blog(LOG_INFO, "[JNCanvas] Preview and Control docks attached to OBS Studio successfully.");
     } else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED ||
@@ -70,6 +72,9 @@ void obs_module_unload(void) {
     blog(LOG_INFO, "[JNCanvas] Unloading JNCanvas plugin...");
 
     obs_frontend_remove_event_callback(on_frontend_event, nullptr);
+
+    obs_frontend_remove_dock("JNCanvasPreviewDock");
+    obs_frontend_remove_dock("JNCanvasControlDock");
 
     RecordEngine::instance().shutdown();
     CanvasEngine::instance().shutdown();

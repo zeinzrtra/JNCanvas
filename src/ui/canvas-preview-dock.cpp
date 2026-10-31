@@ -74,20 +74,17 @@ void CanvasDisplayWidget::hideEvent(QHideEvent *event) {
 }
 
 // ============================================================================
-// CanvasPreviewDock
+// CanvasPreviewDock (Embedded inside OBSDock via obs_frontend_add_dock_by_id)
 // ============================================================================
 
 CanvasPreviewDock::CanvasPreviewDock(QWidget *parent)
-    : QDockWidget(tr("Canvas 2 - Preview"), parent) {
+    : QWidget(parent) {
     setObjectName("JNCanvasPreviewDock");
 
-    QWidget *container = new QWidget(this);
-    QVBoxLayout *layout = new QVBoxLayout(container);
+    QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    display_widget_ = new CanvasDisplayWidget(container);
+    display_widget_ = new CanvasDisplayWidget(this);
     layout->addWidget(display_widget_);
-
-    setWidget(container);
 }
 

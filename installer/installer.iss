@@ -36,6 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 ; Copy plugin dll directly from the build configuration directory
 Source: "..\release\{#Configuration}\jn-canvas\bin\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
+Source: "..\data\*"; DestDir: "{app}\data\obs-plugins\jn-canvas"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Code]
 function InitializeSetup(): Boolean;
