@@ -17,7 +17,7 @@ DirExistsWarning=no
 EnableDirDoesntExistWarning=yes
 DisableDirPage=no
 OutputBaseFilename=JNCanvas-Setup-v1.0.0-Windows-x64
-OutputDir=..\installer_output
+OutputDir=..\release
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -30,12 +30,10 @@ PrivilegesRequired=admin
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\package\obs-plugins\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
-Source: "..\package\data\obs-plugins\jn-canvas\*"; DestDir: "{app}\data\obs-plugins\jn-canvas"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-[Icons]
-
-[Run]
+; Look in standard release output from OBS template build
+Source: "..\release\*\jn-canvas\bin\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
+Source: "..\release\*\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\package\obs-plugins\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Code]
 function InitializeSetup(): Boolean;
@@ -43,7 +41,6 @@ var
   OBSPath: String;
 begin
   Result := True;
-  // Check if OBS Studio is running, warn user if it is
   if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\OBS Studio', 'InstallPath', OBSPath) then
   begin
     Log('Detected OBS installation at: ' + OBSPath);

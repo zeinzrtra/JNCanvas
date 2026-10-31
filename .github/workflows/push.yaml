@@ -1,0 +1,20 @@
+name: Build JNCanvas
+run-name: ${{ github.ref_name }} build run 🚀
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-project:
+    name: Build Plugin (Windows x64) 🧱
+    uses: ./.github/workflows/build-project.yaml
+    secrets: inherit
+    permissions:
+      contents: read
