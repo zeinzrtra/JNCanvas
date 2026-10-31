@@ -33,3 +33,4 @@ public:
 private:
     CanvasDisplayWidget *display_widget_ = nullptr;
 };
+

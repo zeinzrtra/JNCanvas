@@ -57,3 +57,4 @@ private:
     obs_scene_t *current_scene_ = nullptr;
     std::vector<obs_scene_t *> scenes_;
 };
+

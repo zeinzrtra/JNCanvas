@@ -67,3 +67,4 @@ private:
     QPushButton *btn_record_ = nullptr;
     QPushButton *btn_backtrack_ = nullptr;
 };
+

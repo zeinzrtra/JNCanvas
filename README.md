@@ -21,29 +21,33 @@
 
 ---
 
-## 🛠 Panduan Build (Windows x64 Tanpa Visual Studio Lokal)
+## 💻 Cara Install di OBS Studio (Windows)
 
-Project ini sudah dilengkapi **GitHub Actions CI/CD**:
-1. Buat repository baru di GitHub akun abang (misal `JNCanvas`).
+### 🔹 Opsi 1: Installer `.exe` (Rekomendasi - Tinggal Klik Next)
+1. Unduh file **`JNCanvas-Setup-v1.0.0-Windows-x64.exe`**.
+2. Dobel-klik file installer. Installer akan otomatis mendeteksi folder instalasi OBS Studio di PC abang (`C:\Program Files\obs-studio`).
+3. Klik **Next** ➔ **Install** ➔ **Finish**.
+4. Buka OBS Studio. Dock **Canvas 2 - Preview** dan **Canvas 2** akan otomatis muncul!
+
+*(Bisa di-uninstall kapan saja lewat Windows Settings > Installed Apps).*
+
+### 🔹 Opsi 2: File Portable `.zip`
+1. Unduh dan ekstrak file `JNCanvas-Portable-Windows-x64.zip`.
+2. Salin isi folder `obs-plugins/64bit/jn-canvas.dll` ke folder instalasi OBS:
+   `C:\Program Files\obs-studio\obs-plugins\64bit\`
+
+---
+
+## 🛠 Panduan Build Otomatis (GitHub Actions CI/CD)
+
+1. Buat repository baru di GitHub akun abang dengan nama `JNCanvas`.
 2. Push seluruh isi folder ini ke GitHub:
    ```bash
    cd /home/zeinzrtra/obs/JNCanvas
-   git init
-   git add .
-   git commit -m "feat: initial commit JNCanvas v1.0.0"
-   git branch -M main
    git remote add origin https://github.com/<username>/JNCanvas.git
    git push -u origin main
    ```
 3. Buka tab **Actions** di repositori GitHub abang.
-4. Server GitHub (Windows VM) akan otomatis meng-compile kodenya.
-5. Download file artifact **`jn-canvas-windows-x64.zip`** yang sudah jadi!
-
----
-
-## 💻 Cara Install di OBS Studio (Windows)
-
-1. Unduh dan ekstrak file `jn-canvas-windows-x64.zip`.
-2. Salin isi folder `obs-plugins/64bit/jn-canvas.dll` ke folder instalasi OBS abang:
-   `C:\Program Files\obs-studio\obs-plugins\64bit\`
-3. Buka OBS Studio. Dock **Canvas 2 - Preview** dan **Canvas 2** akan otomatis muncul di menu **Docks**!
+4. Server GitHub (Windows VM) otomatis meng-compile kode dan menghasilkan 2 file:
+   - **`JNCanvas-Setup-v1.0.0-Windows-x64.exe`** (Installer)
+   - **`jn-canvas-windows-x64.zip`** (Portable)

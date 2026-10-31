@@ -72,3 +72,4 @@ void obs_module_unload(void) {
 
     blog(LOG_INFO, "[JNCanvas] JNCanvas plugin unloaded.");
 }
+

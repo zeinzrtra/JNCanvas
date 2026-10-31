@@ -52,3 +52,4 @@ JN_CANVAS_EXPORT bool jn_canvas_clone_source_to_scene(obs_source_t *source, cons
 #ifdef __cplusplus
 }
 #endif
+

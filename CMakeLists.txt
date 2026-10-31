@@ -73,3 +73,4 @@ install(TARGETS jn-canvas
     LIBRARY DESTINATION obs-plugins/64bit
     RUNTIME DESTINATION obs-plugins/64bit
 )
+

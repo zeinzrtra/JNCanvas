@@ -86,3 +86,4 @@ CanvasPreviewDock::CanvasPreviewDock(QWidget *parent)
 
     setWidget(container);
 }
+

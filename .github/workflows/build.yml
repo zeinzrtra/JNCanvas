@@ -1,4 +1,4 @@
-name: Build JNCanvas (Windows x64)
+name: Build JNCanvas (Windows x64 & Installer .exe)
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
       run: |
         cmake --build build --config Release
 
-    - name: Prepare Release Package
+    - name: Prepare Package Files
       shell: bash
       run: |
         mkdir -p package/obs-plugins/64bit
@@ -53,9 +53,25 @@ jobs:
         cp build/Release/jn-canvas.dll package/obs-plugins/64bit/ || cp build/jn-canvas.dll package/obs-plugins/64bit/
         cd package && 7z a ../jn-canvas-windows-x64.zip *
 
-    - name: Upload Windows x64 Artifact
+    - name: Install Inno Setup
+      run: |
+        choco install innosetup --no-progress --yes
+
+    - name: Build Windows .exe Installer
+      shell: cmd
+      run: |
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\installer.iss
+
+    - name: Upload Installer (.exe)
       uses: actions/upload-artifact@v4
       with:
-        name: jn-canvas-windows-x64
+        name: JNCanvas-Installer-Windows-x64
+        path: installer_output/JNCanvas-Setup-v1.0.0-Windows-x64.exe
+        retention-days: 14
+
+    - name: Upload Portable Package (.zip)
+      uses: actions/upload-artifact@v4
+      with:
+        name: JNCanvas-Portable-Windows-x64
         path: jn-canvas-windows-x64.zip
         retention-days: 14
