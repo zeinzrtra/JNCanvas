@@ -66,15 +66,16 @@ function Package {
         Verbose = ($Env:CI -ne $null)
     }
     Compress-Archive -Force @CompressArgs
-    
+    Log-Group
+
     # Build Inno Setup .exe Installer
-    if (Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe') {
+    $InnoCompiler = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    if (Test-Path $InnoCompiler) {
         Log-Group 'Building Windows .exe Installer with Inno Setup...'
-        & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/installer/installer.iss" /O"/release" /F""
+        $IssPath = "$ProjectRoot\installer\installer.iss"
+        & $InnoCompiler $IssPath
         Log-Group
     }
-
-    Log-Group
 }
 
 Package
