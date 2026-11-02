@@ -30,9 +30,8 @@ private:
     QMainWindow *main_win_ = nullptr;
     CanvasViewMode current_mode_ = CanvasViewMode::MainOnly;
 
-    QWidget *canvas_editor_ = nullptr;
-    QHBoxLayout *preview_layout_ = nullptr;
-    QWidget *main_preview_container_ = nullptr;
+    QWidget *native_preview_ = nullptr;
+    QWidget *preview_container_ = nullptr;
     UnifiedCanvasDisplay *unified_display_ = nullptr;
 
     void setup_unified_display();

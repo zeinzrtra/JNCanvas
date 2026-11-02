@@ -47,6 +47,7 @@ private:
     gs_texrender_t *vert_texrender_ = nullptr;
     UnifiedViewMode mode_ = UnifiedViewMode::DualView;
 
+    bool is_custom_zoom_ = false;
     float zoom_ = 1.0f;
     float pan_x_ = 0.0f;
     float pan_y_ = 0.0f;

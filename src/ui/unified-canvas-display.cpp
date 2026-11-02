@@ -32,14 +32,17 @@ UnifiedCanvasDisplay::~UnifiedCanvasDisplay() {
 
 void UnifiedCanvasDisplay::set_mode(UnifiedViewMode mode) {
     mode_ = mode;
-    fit_to_screen();
+    is_custom_zoom_ = false;
     update();
 }
 
 void UnifiedCanvasDisplay::reset_zoom() {
-    zoom_ = 1.0f;
-    pan_x_ = 0.0f;
-    pan_y_ = 0.0f;
+    is_custom_zoom_ = false;
+    update();
+}
+
+void UnifiedCanvasDisplay::fit_to_screen() {
+    is_custom_zoom_ = false;
     update();
 }
 
@@ -97,13 +100,14 @@ void UnifiedCanvasDisplay::resizeEvent(QResizeEvent *event) {
         QSize size = get_pixel_size(this);
         obs_display_resize(display_, size.width(), size.height());
     }
-    fit_to_screen();
+    update();
 }
 
 void UnifiedCanvasDisplay::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     create_display();
-    fit_to_screen();
+    is_custom_zoom_ = false;
+    update();
 }
 
 void UnifiedCanvasDisplay::hideEvent(QHideEvent *event) {
@@ -111,54 +115,11 @@ void UnifiedCanvasDisplay::hideEvent(QHideEvent *event) {
     destroy_display();
 }
 
-void UnifiedCanvasDisplay::fit_to_screen() {
-    QSize size = get_pixel_size(this);
-    if (size.width() <= 0 || size.height() <= 0) return;
-
-    obs_video_info ovi = {};
-    uint32_t main_w = 1920, main_h = 1080;
-    if (obs_get_video_info(&ovi)) {
-        main_w = ovi.base_width;
-        main_h = ovi.base_height;
-    }
-
-    uint32_t vert_w = CanvasEngine::instance().width();
-    uint32_t vert_h = CanvasEngine::instance().height();
-    if (vert_w == 0) vert_w = 1080;
-    if (vert_h == 0) vert_h = 1920;
-
-    float base_h = (float)main_h;
-    float aspect_vert = (float)vert_w / (float)vert_h;
-    float draw_vert_w = base_h * aspect_vert;
-    float draw_vert_h = base_h;
-
-    if (mode_ == UnifiedViewMode::DualView) {
-        float gap = 40.0f;
-        float total_w = (float)main_w + gap + draw_vert_w;
-        float total_h = base_h;
-
-        float scale_x = (float)size.width() / total_w;
-        float scale_y = (float)size.height() / total_h;
-        zoom_ = (std::min)(scale_x, scale_y) * 0.95f;
-
-        pan_x_ = ((float)size.width() - total_w * zoom_) * 0.5f;
-        pan_y_ = ((float)size.height() - total_h * zoom_) * 0.5f;
-    } else {
-        float total_w = draw_vert_w;
-        float total_h = draw_vert_h;
-
-        float scale_x = (float)size.width() / total_w;
-        float scale_y = (float)size.height() / total_h;
-        zoom_ = (std::min)(scale_x, scale_y) * 0.95f;
-
-        pan_x_ = ((float)size.width() - total_w * zoom_) * 0.5f;
-        pan_y_ = ((float)size.height() - total_h * zoom_) * 0.5f;
-    }
-}
-
 void UnifiedCanvasDisplay::wheelEvent(QWheelEvent *event) {
     float delta = event->angleDelta().y();
     if (delta == 0.0f) return;
+
+    is_custom_zoom_ = true;
 
     float factor = (delta > 0) ? 1.1f : 0.909f;
     float new_zoom = zoom_ * factor;
@@ -187,6 +148,7 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
 
 void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
     if (is_panning_) {
+        is_custom_zoom_ = true;
         const qreal dpr = devicePixelRatioF();
         pan_x_ += (float)((event->pos().x() - last_mouse_pos_.x()) * dpr);
         pan_y_ += (float)((event->pos().y() - last_mouse_pos_.y()) * dpr);
@@ -211,7 +173,6 @@ void UnifiedCanvasDisplay::mouseReleaseEvent(QMouseEvent *event) {
 void UnifiedCanvasDisplay::mouseDoubleClickEvent(QMouseEvent *event) {
     Q_UNUSED(event);
     fit_to_screen();
-    update();
 }
 
 void UnifiedCanvasDisplay::draw_solid_rect(float x, float y, float w, float h, float r, float g, float b, float a) {
@@ -305,18 +266,34 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     }
     gs_texture_t *vert_tex = vert_texrender_ ? gs_texrender_get_texture(vert_texrender_) : nullptr;
 
-    // 2. Apply viewport transformation (Zoom & Pan applied together to all canvases)
-    gs_matrix_push();
-    gs_matrix_translate3f(pan_x_, pan_y_, 0.0f);
-    gs_matrix_scale3f(zoom_, zoom_, 1.0f);
-
     float base_h = (float)main_h; // Visual reference height = 1080.0f
     float aspect_vert = (float)vert_w / (float)vert_h; // 1080 / 1920 = 0.5625 (9:16)
     float draw_vert_w = base_h * aspect_vert; // 1080 * 0.5625 = 607.5f
     float draw_vert_h = base_h; // 1080.0f -> EXACT SAME HEIGHT AS MAIN!
 
+    float gap = 40.0f;
+    float total_w = (mode_ == UnifiedViewMode::DualView) ? ((float)main_w + gap + draw_vert_w) : draw_vert_w;
+    float total_h = base_h;
+
+    // Dynamically calculate auto-fit zoom and perfect mathematical center in actual viewport (cx, cy)
+    float scale_x = (float)cx / total_w;
+    float scale_y = (float)cy / total_h;
+    float auto_zoom = (std::min)(scale_x, scale_y) * 0.94f;
+    float auto_pan_x = ((float)cx - total_w * auto_zoom) * 0.5f;
+    float auto_pan_y = ((float)cy - total_h * auto_zoom) * 0.5f;
+
+    if (!is_custom_zoom_) {
+        zoom_ = auto_zoom;
+        pan_x_ = auto_pan_x;
+        pan_y_ = auto_pan_y;
+    }
+
+    // 2. Apply viewport transformation (Zoom & Pan applied together to all canvases)
+    gs_matrix_push();
+    gs_matrix_translate3f(pan_x_, pan_y_, 0.0f);
+    gs_matrix_scale3f(zoom_, zoom_, 1.0f);
+
     if (mode_ == UnifiedViewMode::DualView) {
-        float gap = 40.0f;
         float main_x = 0.0f;
         float main_y = 0.0f;
         float vert_x = (float)main_w + gap;
