@@ -35,3 +35,4 @@ private:
     void setup_ui();
     void setup_stylesheet();
 };
+

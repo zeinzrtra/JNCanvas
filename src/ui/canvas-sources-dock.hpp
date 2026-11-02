@@ -47,3 +47,4 @@ private:
     void setup_stylesheet();
     obs_sceneitem_t *get_selected_sceneitem();
 };
+
