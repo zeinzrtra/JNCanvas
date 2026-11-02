@@ -1,19 +1,18 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QMainWindow>
-#include <QDockWidget>
 #include "canvas-engine.hpp"
 #include "record-engine.hpp"
-#include "ui/canvas-preview-dock.hpp"
-#include "ui/canvas-control-dock.hpp"
+#include "ui/canvas-scenes-dock.hpp"
+#include "ui/canvas-sources-dock.hpp"
 #include "ui/canvas-central-view.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("jn-canvas", "en-US")
 
 static CanvasCentralView *central_view = nullptr;
-static CanvasPreviewDock *preview_dock = nullptr;
-static CanvasControlDock *control_dock = nullptr;
+static CanvasScenesDock *scenes_dock = nullptr;
+static CanvasSourcesDock *sources_dock = nullptr;
 
 MODULE_EXPORT const char *obs_module_name(void) {
     return "JNCanvas";
@@ -29,36 +28,30 @@ static void on_frontend_event(enum obs_frontend_event event, void *private_data)
         QMainWindow *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
         if (!main_win) return;
 
-        // 1. Integrated Central Canvas Preview (Tabbed View + Side-by-Side Dual View)
+        // 1. Integrated Central Canvas Preview (Tabbed View: Main 16:9, Canvas 2 9:16, Dual View)
         central_view = new CanvasCentralView(main_win);
         central_view->init();
 
-        // 2. Control Dock (Canvas 2 Tabbed Scenes & Sources)
-        control_dock = new CanvasControlDock(main_win);
-        obs_frontend_add_dock_by_id("JNCanvasControlDock", "Canvas 2", control_dock);
+        // 2. Native Scenes Dock for Canvas 2
+        scenes_dock = new CanvasScenesDock(main_win);
+        obs_frontend_add_dock_by_id("JNCanvasScenesDock", "Scenes (Canvas 2)", scenes_dock);
 
-        // Auto-tabify with native scenesDock so it smoothly integrates into the bottom dock area
-        QDockWidget *scenes_dock = main_win->findChild<QDockWidget *>("scenesDock");
-        QDockWidget *control_dock_widget = qobject_cast<QDockWidget *>(control_dock->parentWidget());
-        if (scenes_dock && control_dock_widget) {
-            main_win->tabifyDockWidget(scenes_dock, control_dock_widget);
-            scenes_dock->raise(); // keep native scenes active by default
-        } else if (control_dock_widget) {
-            control_dock_widget->setVisible(true);
-        }
+        // 3. Native Sources Dock for Canvas 2
+        sources_dock = new CanvasSourcesDock(main_win);
+        obs_frontend_add_dock_by_id("JNCanvasSourcesDock", "Sources (Canvas 2)", sources_dock);
 
-        // 3. Optional detached preview dock (starts hidden so no floating window clutter)
-        preview_dock = new CanvasPreviewDock(main_win);
-        obs_frontend_add_dock_by_id("JNCanvasPreviewDock", "Canvas 2 - Preview (Detached)", preview_dock);
-        if (preview_dock->parentWidget()) {
-            preview_dock->parentWidget()->setVisible(false);
-        }
+        // Connect scene selection in Scenes dock to update Sources dock
+        QObject::connect(scenes_dock, &CanvasScenesDock::scene_changed,
+                         sources_dock, &CanvasSourcesDock::on_scene_changed);
 
-        blog(LOG_INFO, "[JNCanvas] Central Canvas View and Control docks attached to OBS Studio successfully.");
+        blog(LOG_INFO, "[JNCanvas] Central Unified Canvas View, Scenes dock, and Sources dock registered successfully.");
     } else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED ||
                event == OBS_FRONTEND_EVENT_SCENE_CHANGED) {
-        if (control_dock) {
-            control_dock->refresh_sources();
+        if (scenes_dock) {
+            scenes_dock->refresh_scenes();
+        }
+        if (sources_dock) {
+            sources_dock->refresh_sources();
         }
     }
 }
@@ -87,8 +80,8 @@ void obs_module_unload(void) {
 
     obs_frontend_remove_event_callback(on_frontend_event, nullptr);
 
-    obs_frontend_remove_dock("JNCanvasPreviewDock");
-    obs_frontend_remove_dock("JNCanvasControlDock");
+    obs_frontend_remove_dock("JNCanvasScenesDock");
+    obs_frontend_remove_dock("JNCanvasSourcesDock");
 
     if (central_view) {
         delete central_view;
@@ -100,4 +93,3 @@ void obs_module_unload(void) {
 
     blog(LOG_INFO, "[JNCanvas] JNCanvas plugin unloaded.");
 }
-

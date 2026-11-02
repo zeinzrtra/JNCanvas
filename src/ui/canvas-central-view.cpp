@@ -1,14 +1,13 @@
 #include "canvas-central-view.hpp"
 #include <obs-module.h>
-#include <QFrame>
 
 CanvasCentralView::CanvasCentralView(QMainWindow *main_window, QObject *parent)
     : QObject(parent), main_win_(main_window) {}
 
 CanvasCentralView::~CanvasCentralView() {
-    if (vertical_container_) {
-        vertical_container_->deleteLater();
-        vertical_container_ = nullptr;
+    if (unified_display_) {
+        unified_display_->deleteLater();
+        unified_display_ = nullptr;
     }
     if (tab_container_) {
         tab_container_->deleteLater();
@@ -29,12 +28,12 @@ bool CanvasCentralView::init() {
     }
 
     setup_tab_bar();
-    setup_vertical_container();
+    setup_unified_display();
 
-    // Default to DualView so user immediately sees both side-by-side, or MainOnly
-    set_mode(CanvasViewMode::DualView);
+    // Default to MainOnly on startup so OBS native scene editing is preserved
+    set_mode(CanvasViewMode::MainOnly);
 
-    blog(LOG_INFO, "[JNCanvas] Central canvas tabbed view integrated successfully.");
+    blog(LOG_INFO, "[JNCanvas] Central unified canvas view initialized successfully.");
     return true;
 }
 
@@ -66,7 +65,7 @@ void CanvasCentralView::setup_tab_bar() {
         QTabBar#JNCanvasCentralTabBar::tab {
             background-color: #21252b;
             color: #9da5b4;
-            padding: 4px 14px;
+            padding: 5px 16px;
             margin-right: 4px;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
@@ -89,30 +88,17 @@ void CanvasCentralView::setup_tab_bar() {
     h_layout->addWidget(tab_bar_);
     h_layout->addStretch(1);
 
-    // Insert at index 0 of verticalLayout (right above canvasEditor)
+    // Insert above canvasEditor
     central_layout->insertWidget(0, tab_container_);
 }
 
-void CanvasCentralView::setup_vertical_container() {
-    vertical_container_ = new QWidget(canvas_editor_);
-    vertical_container_->setObjectName("JNCanvasVerticalCentralContainer");
+void CanvasCentralView::setup_unified_display() {
+    unified_display_ = new UnifiedCanvasDisplay(canvas_editor_);
+    unified_display_->setObjectName("JNUnifiedCanvasDisplay");
 
-    QVBoxLayout *v_layout = new QVBoxLayout(vertical_container_);
-    v_layout->setContentsMargins(0, 0, 0, 0);
-    v_layout->setSpacing(2);
-
-    // Title header matching OBS previewLabel style
-    QLabel *title_label = new QLabel(tr("Canvas 2 (9:16)"), vertical_container_);
-    title_label->setObjectName("JNCanvasTitleLabel");
-    title_label->setStyleSheet("font-weight: bold; font-size: 11px; color: #abb2bf; padding: 2px 6px;");
-    v_layout->addWidget(title_label);
-
-    vertical_display_ = new CanvasDisplayWidget(vertical_container_);
-    vertical_display_->setObjectName("JNCanvasCentralDisplay");
-    v_layout->addWidget(vertical_display_, 1);
-
-    // Add into OBS QHBoxLayout (previewLayout) right next to main previewContainer
-    preview_layout_->addWidget(vertical_container_);
+    // Add to preview layout alongside main_preview_container_
+    preview_layout_->addWidget(unified_display_, 1);
+    unified_display_->hide();
 }
 
 void CanvasCentralView::on_tab_changed(int index) {
@@ -136,17 +122,22 @@ void CanvasCentralView::set_mode(CanvasViewMode mode) {
 void CanvasCentralView::apply_mode(CanvasViewMode mode) {
     switch (mode) {
     case CanvasViewMode::MainOnly:
+        if (unified_display_) unified_display_->hide();
         if (main_preview_container_) main_preview_container_->show();
-        if (vertical_container_) vertical_container_->hide();
         break;
     case CanvasViewMode::Canvas2Only:
         if (main_preview_container_) main_preview_container_->hide();
-        if (vertical_container_) vertical_container_->show();
+        if (unified_display_) {
+            unified_display_->show();
+            unified_display_->set_mode(UnifiedViewMode::Canvas2Only);
+        }
         break;
     case CanvasViewMode::DualView:
-        if (main_preview_container_) main_preview_container_->show();
-        if (vertical_container_) vertical_container_->show();
+        if (main_preview_container_) main_preview_container_->hide();
+        if (unified_display_) {
+            unified_display_->show();
+            unified_display_->set_mode(UnifiedViewMode::DualView);
+        }
         break;
     }
 }
-

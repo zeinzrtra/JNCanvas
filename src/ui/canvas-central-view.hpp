@@ -4,9 +4,8 @@
 #include <QTabBar>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QLabel>
 #include <QMainWindow>
-#include "canvas-preview-dock.hpp"
+#include "unified-canvas-display.hpp"
 
 enum class CanvasViewMode {
     MainOnly = 0,
@@ -37,11 +36,9 @@ private:
 
     QTabBar *tab_bar_ = nullptr;
     QWidget *tab_container_ = nullptr;
-    QWidget *vertical_container_ = nullptr;
-    CanvasDisplayWidget *vertical_display_ = nullptr;
+    UnifiedCanvasDisplay *unified_display_ = nullptr;
 
     void setup_tab_bar();
-    void setup_vertical_container();
+    void setup_unified_display();
     void apply_mode(CanvasViewMode mode);
 };
-

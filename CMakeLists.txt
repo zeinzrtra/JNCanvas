@@ -46,6 +46,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/ui/canvas-preview-dock.cpp
   src/ui/canvas-control-dock.cpp
   src/ui/canvas-central-view.cpp
+  src/ui/unified-canvas-display.cpp
+  src/ui/canvas-scenes-dock.cpp
+  src/ui/canvas-sources-dock.cpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
