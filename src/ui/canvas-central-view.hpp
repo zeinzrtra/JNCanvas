@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QWidget>
-#include <QHBoxLayout>
+#include <QStackedWidget>
 #include <QMainWindow>
 #include "unified-canvas-display.hpp"
 
@@ -32,8 +32,8 @@ private:
 
     QWidget *native_preview_ = nullptr;
     QWidget *preview_container_ = nullptr;
+    QStackedWidget *stack_widget_ = nullptr;
     UnifiedCanvasDisplay *unified_display_ = nullptr;
 
-    void setup_unified_display();
     void apply_mode(CanvasViewMode mode);
 };

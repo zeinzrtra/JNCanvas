@@ -191,8 +191,28 @@ obs_sceneitem_t *CanvasSourcesDock::get_selected_sceneitem() {
     return static_cast<obs_sceneitem_t *>(item->data(Qt::UserRole).value<void *>());
 }
 
+void CanvasSourcesDock::select_sceneitem(obs_sceneitem_t *target_item) {
+    source_list_->blockSignals(true);
+    if (!target_item) {
+        source_list_->clearSelection();
+    } else {
+        for (int i = 0; i < source_list_->count(); ++i) {
+            QListWidgetItem *witem = source_list_->item(i);
+            obs_sceneitem_t *sitem = static_cast<obs_sceneitem_t *>(witem->data(Qt::UserRole).value<void *>());
+            if (sitem == target_item) {
+                source_list_->setCurrentItem(witem);
+                break;
+            }
+        }
+    }
+    source_list_->blockSignals(false);
+    on_selection_changed();
+}
+
 void CanvasSourcesDock::on_selection_changed() {
     obs_sceneitem_t *item = get_selected_sceneitem();
+    emit sceneitem_selected(item);
+
     if (item) {
         obs_source_t *src = obs_sceneitem_get_source(item);
         if (src) {

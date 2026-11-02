@@ -13,6 +13,10 @@ public:
     ~CanvasSourcesDock() override = default;
 
     void refresh_sources();
+    void select_sceneitem(obs_sceneitem_t *item);
+
+signals:
+    void sceneitem_selected(obs_sceneitem_t *item);
 
 public slots:
     void on_scene_changed(obs_scene_t *scene);
