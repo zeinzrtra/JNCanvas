@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "unified-canvas-display.hpp"
 #include "../canvas-engine.hpp"
 #include <algorithm>
@@ -96,18 +100,18 @@ void UnifiedCanvasDisplay::fit_to_screen() {
     if (mode_ == UnifiedViewMode::DualView) {
         float gap = 60.0f;
         float total_w = (float)main_w + gap + (float)vert_w;
-        float total_h = (float)std::max(main_h, vert_h);
+        float total_h = (float)(std::max)(main_h, vert_h);
 
         float scale_x = (float)width() / total_w;
         float scale_y = (float)height() / total_h;
-        zoom_ = std::min(scale_x, scale_y) * 0.90f;
+        zoom_ = (std::min)(scale_x, scale_y) * 0.90f;
 
         pan_x_ = ((float)width() - total_w * zoom_) * 0.5f;
         pan_y_ = ((float)height() - total_h * zoom_) * 0.5f;
     } else {
         float scale_x = (float)width() / (float)vert_w;
         float scale_y = (float)height() / (float)vert_h;
-        zoom_ = std::min(scale_x, scale_y) * 0.90f;
+        zoom_ = (std::min)(scale_x, scale_y) * 0.90f;
 
         pan_x_ = ((float)width() - (float)vert_w * zoom_) * 0.5f;
         pan_y_ = ((float)height() - (float)vert_h * zoom_) * 0.5f;
@@ -232,7 +236,7 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
 
     if (mode_ == UnifiedViewMode::DualView) {
         float gap = 60.0f;
-        float max_h = (float)std::max(main_h, vert_h);
+        float max_h = (float)(std::max)(main_h, vert_h);
         float main_x = 0.0f;
         float main_y = (max_h - (float)main_h) * 0.5f;
         float vert_x = (float)main_w + gap;

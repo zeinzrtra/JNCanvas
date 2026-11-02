@@ -330,7 +330,7 @@ void CanvasSourcesDock::on_record_clicked() {
 }
 
 void CanvasSourcesDock::on_backtrack_clicked() {
-    if (RecordEngine::instance().save_replay()) {
+    if (RecordEngine::instance().save_replay_buffer()) {
         btn_backtrack_->setText(tr("SAVED!"));
         QTimer::singleShot(1500, this, [this]() {
             btn_backtrack_->setText(tr("⚡ CLIP"));
