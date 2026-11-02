@@ -1,6 +1,7 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QMainWindow>
+#include <QDockWidget>
 #include "canvas-engine.hpp"
 #include "record-engine.hpp"
 #include "ui/canvas-preview-dock.hpp"

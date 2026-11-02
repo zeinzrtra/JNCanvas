@@ -44,3 +44,4 @@ private:
     void setup_vertical_container();
     void apply_mode(CanvasViewMode mode);
 };
+

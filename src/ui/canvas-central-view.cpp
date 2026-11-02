@@ -1,4 +1,5 @@
 #include "canvas-central-view.hpp"
+#include <obs-module.h>
 #include <QFrame>
 
 CanvasCentralView::CanvasCentralView(QMainWindow *main_window, QObject *parent)
@@ -148,3 +149,4 @@ void CanvasCentralView::apply_mode(CanvasViewMode mode) {
         break;
     }
 }
+
