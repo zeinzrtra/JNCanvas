@@ -23,8 +23,11 @@ UnifiedCanvasDisplay::UnifiedCanvasDisplay(QWidget *parent)
     setAttribute(Qt::WA_StaticContents);
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_OpaquePaintEvent);
+    setAttribute(Qt::WA_NativeWindow);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setMinimumSize(32, 32);
 }
 
 UnifiedCanvasDisplay::~UnifiedCanvasDisplay() {
@@ -535,7 +538,7 @@ void UnifiedCanvasDisplay::draw_callback(void *param, uint32_t cx, uint32_t cy) 
 }
 
 void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
-    if (cx == 0 || cy == 0) return;
+    if (cx < 10 || cy < 10) return;
 
     // 1. Draw workspace background (OBS dark canvas gray #141619)
     draw_solid_rect(0.0f, 0.0f, (float)cx, (float)cy, 0.078f, 0.086f, 0.098f, 1.0f);
