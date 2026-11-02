@@ -5,8 +5,11 @@ CanvasCentralView::CanvasCentralView(QMainWindow *main_window, QObject *parent)
     : QObject(parent), main_win_(main_window) {}
 
 CanvasCentralView::~CanvasCentralView() {
+    if (main_preview_container_) {
+        main_preview_container_->show();
+    }
     if (unified_display_) {
-        unified_display_->deleteLater();
+        delete unified_display_;
         unified_display_ = nullptr;
     }
 }

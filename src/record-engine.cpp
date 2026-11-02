@@ -22,8 +22,21 @@ bool RecordEngine::init() {
 }
 
 void RecordEngine::shutdown() {
-    stop_recording();
-    stop_replay_buffer();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (record_output_) {
+            obs_output_force_stop(record_output_);
+            obs_output_release(record_output_);
+            record_output_ = nullptr;
+            is_recording_ = false;
+        }
+        if (replay_output_) {
+            obs_output_force_stop(replay_output_);
+            obs_output_release(replay_output_);
+            replay_output_ = nullptr;
+            is_replay_buffer_active_ = false;
+        }
+    }
     cleanup_encoders();
 }
 

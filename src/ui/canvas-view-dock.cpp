@@ -174,3 +174,4 @@ void CanvasViewDock::update_button_states(CanvasViewMode mode) {
     btn_canvas2_->blockSignals(false);
     btn_dual_->blockSignals(false);
 }
+

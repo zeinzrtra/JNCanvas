@@ -28,8 +28,8 @@ bool CanvasEngine::init() {
         return false;
     }
 
-    // Create a default vertical scene
-    obs_scene_t *default_scene = obs_scene_create("JNCanvas Default");
+    // Create a default vertical scene as private so OBS frontend does not attach dangling signal handlers
+    obs_scene_t *default_scene = obs_scene_create_private("JNCanvas Default");
     if (default_scene) {
         scenes_.push_back(default_scene);
         current_scene_ = default_scene;
@@ -90,7 +90,7 @@ void CanvasEngine::set_current_scene(obs_scene_t *scene) {
 
 obs_scene_t *CanvasEngine::create_scene(const std::string &name) {
     std::lock_guard<std::mutex> lock(mutex_);
-    obs_scene_t *scene = obs_scene_create(name.c_str());
+    obs_scene_t *scene = obs_scene_create_private(name.c_str());
     if (scene) {
         scenes_.push_back(scene);
         if (!current_scene_) {
@@ -136,7 +136,7 @@ bool CanvasEngine::clone_source_to_scene(obs_source_t *source, const std::string
 
     if (!target_scene) {
         // Create if doesn't exist yet
-        target_scene = obs_scene_create(scene_name.c_str());
+        target_scene = obs_scene_create_private(scene_name.c_str());
         if (!target_scene) return false;
         scenes_.push_back(target_scene);
     }

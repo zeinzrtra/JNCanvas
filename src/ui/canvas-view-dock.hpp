@@ -38,3 +38,4 @@ private:
     void setup_stylesheet();
     void update_button_states(CanvasViewMode mode);
 };
+

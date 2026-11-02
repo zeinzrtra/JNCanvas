@@ -43,8 +43,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/plugin-main.cpp
   src/canvas-engine.cpp
   src/record-engine.cpp
-  src/ui/canvas-preview-dock.cpp
-  src/ui/canvas-control-dock.cpp
   src/ui/canvas-central-view.cpp
   src/ui/unified-canvas-display.cpp
   src/ui/canvas-scenes-dock.cpp

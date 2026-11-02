@@ -10,6 +10,12 @@
 #include <windows.h>
 #endif
 
+static inline QSize get_pixel_size(QWidget *widget) {
+    const qreal dpr = widget->devicePixelRatioF();
+    return QSize((std::max)(1, qRound(widget->width() * dpr)),
+                 (std::max)(1, qRound(widget->height() * dpr)));
+}
+
 UnifiedCanvasDisplay::UnifiedCanvasDisplay(QWidget *parent)
     : QWidget(parent) {
     setAttribute(Qt::WA_PaintOnScreen);
@@ -40,9 +46,10 @@ void UnifiedCanvasDisplay::reset_zoom() {
 void UnifiedCanvasDisplay::create_display() {
     if (display_) return;
 
+    QSize size = get_pixel_size(this);
     gs_init_data info = {};
-    info.cx = width() > 0 ? width() : 1280;
-    info.cy = height() > 0 ? height() : 720;
+    info.cx = (uint32_t)size.width();
+    info.cy = (uint32_t)size.height();
     info.format = GS_RGBA;
     info.zsformat = GS_ZS_NONE;
 #ifdef _WIN32
@@ -57,7 +64,9 @@ void UnifiedCanvasDisplay::create_display() {
     }
 
     if (!vert_texrender_) {
+        obs_enter_graphics();
         vert_texrender_ = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+        obs_leave_graphics();
     }
 }
 
@@ -68,7 +77,9 @@ void UnifiedCanvasDisplay::destroy_display() {
         display_ = nullptr;
     }
     if (vert_texrender_) {
+        obs_enter_graphics();
         gs_texrender_destroy(vert_texrender_);
+        obs_leave_graphics();
         vert_texrender_ = nullptr;
     }
 }
@@ -83,7 +94,8 @@ void UnifiedCanvasDisplay::paintEvent(QPaintEvent *event) {
 void UnifiedCanvasDisplay::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     if (display_) {
-        obs_display_resize(display_, width(), height());
+        QSize size = get_pixel_size(this);
+        obs_display_resize(display_, size.width(), size.height());
     }
     fit_to_screen();
 }
@@ -100,7 +112,8 @@ void UnifiedCanvasDisplay::hideEvent(QHideEvent *event) {
 }
 
 void UnifiedCanvasDisplay::fit_to_screen() {
-    if (width() <= 0 || height() <= 0) return;
+    QSize size = get_pixel_size(this);
+    if (size.width() <= 0 || size.height() <= 0) return;
 
     obs_video_info ovi = {};
     uint32_t main_w = 1920, main_h = 1080;
@@ -120,26 +133,26 @@ void UnifiedCanvasDisplay::fit_to_screen() {
     float draw_vert_h = base_h;
 
     if (mode_ == UnifiedViewMode::DualView) {
-        float gap = 50.0f;
+        float gap = 40.0f;
         float total_w = (float)main_w + gap + draw_vert_w;
         float total_h = base_h;
 
-        float scale_x = (float)width() / total_w;
-        float scale_y = (float)height() / total_h;
-        zoom_ = (std::min)(scale_x, scale_y) * 0.94f;
+        float scale_x = (float)size.width() / total_w;
+        float scale_y = (float)size.height() / total_h;
+        zoom_ = (std::min)(scale_x, scale_y) * 0.95f;
 
-        pan_x_ = ((float)width() - total_w * zoom_) * 0.5f;
-        pan_y_ = ((float)height() - total_h * zoom_) * 0.5f;
+        pan_x_ = ((float)size.width() - total_w * zoom_) * 0.5f;
+        pan_y_ = ((float)size.height() - total_h * zoom_) * 0.5f;
     } else {
         float total_w = draw_vert_w;
         float total_h = draw_vert_h;
 
-        float scale_x = (float)width() / total_w;
-        float scale_y = (float)height() / total_h;
-        zoom_ = (std::min)(scale_x, scale_y) * 0.94f;
+        float scale_x = (float)size.width() / total_w;
+        float scale_y = (float)size.height() / total_h;
+        zoom_ = (std::min)(scale_x, scale_y) * 0.95f;
 
-        pan_x_ = ((float)width() - total_w * zoom_) * 0.5f;
-        pan_y_ = ((float)height() - total_h * zoom_) * 0.5f;
+        pan_x_ = ((float)size.width() - total_w * zoom_) * 0.5f;
+        pan_y_ = ((float)size.height() - total_h * zoom_) * 0.5f;
     }
 }
 
@@ -149,11 +162,12 @@ void UnifiedCanvasDisplay::wheelEvent(QWheelEvent *event) {
 
     float factor = (delta > 0) ? 1.1f : 0.909f;
     float new_zoom = zoom_ * factor;
-    if (new_zoom < 0.05f || new_zoom > 10.0f) return;
+    if (new_zoom < 0.05f || new_zoom > 15.0f) return;
 
-    QPointF mouse_pos = event->position();
-    pan_x_ = mouse_pos.x() - (mouse_pos.x() - pan_x_) * factor;
-    pan_y_ = mouse_pos.y() - (mouse_pos.y() - pan_y_) * factor;
+    const qreal dpr = devicePixelRatioF();
+    QPointF mouse_pos = event->position() * dpr;
+    pan_x_ = (float)(mouse_pos.x() - (mouse_pos.x() - pan_x_) * factor);
+    pan_y_ = (float)(mouse_pos.y() - (mouse_pos.y() - pan_y_) * factor);
     zoom_ = new_zoom;
 
     update();
@@ -173,8 +187,9 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
 
 void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
     if (is_panning_) {
-        pan_x_ += (float)(event->pos().x() - last_mouse_pos_.x());
-        pan_y_ += (float)(event->pos().y() - last_mouse_pos_.y());
+        const qreal dpr = devicePixelRatioF();
+        pan_x_ += (float)((event->pos().x() - last_mouse_pos_.x()) * dpr);
+        pan_y_ += (float)((event->pos().y() - last_mouse_pos_.y()) * dpr);
         last_mouse_pos_ = event->pos();
         update();
         event->accept();
@@ -200,6 +215,8 @@ void UnifiedCanvasDisplay::mouseDoubleClickEvent(QMouseEvent *event) {
 }
 
 void UnifiedCanvasDisplay::draw_solid_rect(float x, float y, float w, float h, float r, float g, float b, float a) {
+    if (w <= 0.0f || h <= 0.0f) return;
+
     gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
     if (!solid) return;
 
@@ -224,6 +241,7 @@ void UnifiedCanvasDisplay::draw_solid_rect(float x, float y, float w, float h, f
 }
 
 void UnifiedCanvasDisplay::draw_canvas_frame(float x, float y, float w, float h, float r, float g, float b) {
+    if (w <= 0.0f || h <= 0.0f) return;
     float border = 3.0f;
     // Outer border frame
     draw_solid_rect(x - border, y - border, w + border * 2.0f, h + border * 2.0f, r, g, b, 1.0f);
@@ -232,7 +250,7 @@ void UnifiedCanvasDisplay::draw_canvas_frame(float x, float y, float w, float h,
 }
 
 void UnifiedCanvasDisplay::draw_texture(gs_texture_t *tex, float x, float y, float w, float h) {
-    if (!tex) return;
+    if (!tex || w <= 0.0f || h <= 0.0f) return;
     gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
     if (!effect) return;
 
@@ -298,7 +316,7 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     float draw_vert_h = base_h; // 1080.0f -> EXACT SAME HEIGHT AS MAIN!
 
     if (mode_ == UnifiedViewMode::DualView) {
-        float gap = 50.0f;
+        float gap = 40.0f;
         float main_x = 0.0f;
         float main_y = 0.0f;
         float vert_x = (float)main_w + gap;

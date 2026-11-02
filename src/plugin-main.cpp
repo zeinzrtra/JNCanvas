@@ -95,6 +95,10 @@ void obs_module_unload(void) {
         central_view = nullptr;
     }
 
+    canvas_dock = nullptr;
+    scenes_dock = nullptr;
+    sources_dock = nullptr;
+
     RecordEngine::instance().shutdown();
     CanvasEngine::instance().shutdown();
 
