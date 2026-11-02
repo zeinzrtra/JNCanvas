@@ -5,10 +5,12 @@
 #include "record-engine.hpp"
 #include "ui/canvas-preview-dock.hpp"
 #include "ui/canvas-control-dock.hpp"
+#include "ui/canvas-central-view.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("jn-canvas", "en-US")
 
+static CanvasCentralView *central_view = nullptr;
 static CanvasPreviewDock *preview_dock = nullptr;
 static CanvasControlDock *control_dock = nullptr;
 
@@ -26,21 +28,32 @@ static void on_frontend_event(enum obs_frontend_event event, void *private_data)
         QMainWindow *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
         if (!main_win) return;
 
-        // Create Preview Dock (can be placed on left, right, top, or floating)
-        preview_dock = new CanvasPreviewDock(main_win);
-        obs_frontend_add_dock_by_id("JNCanvasPreviewDock", "Canvas 2 - Preview", preview_dock);
-        if (preview_dock->parentWidget()) {
-            preview_dock->parentWidget()->setVisible(true);
-        }
+        // 1. Integrated Central Canvas Preview (Tabbed View + Side-by-Side Dual View)
+        central_view = new CanvasCentralView(main_win);
+        central_view->init();
 
-        // Create Control Dock (Canvas 2 Tabbed Scenes & Sources)
+        // 2. Control Dock (Canvas 2 Tabbed Scenes & Sources)
         control_dock = new CanvasControlDock(main_win);
         obs_frontend_add_dock_by_id("JNCanvasControlDock", "Canvas 2", control_dock);
-        if (control_dock->parentWidget()) {
-            control_dock->parentWidget()->setVisible(true);
+
+        // Auto-tabify with native scenesDock so it smoothly integrates into the bottom dock area
+        QDockWidget *scenes_dock = main_win->findChild<QDockWidget *>("scenesDock");
+        QDockWidget *control_dock_widget = qobject_cast<QDockWidget *>(control_dock->parentWidget());
+        if (scenes_dock && control_dock_widget) {
+            main_win->tabifyDockWidget(scenes_dock, control_dock_widget);
+            scenes_dock->raise(); // keep native scenes active by default
+        } else if (control_dock_widget) {
+            control_dock_widget->setVisible(true);
         }
 
-        blog(LOG_INFO, "[JNCanvas] Preview and Control docks attached to OBS Studio successfully.");
+        // 3. Optional detached preview dock (starts hidden so no floating window clutter)
+        preview_dock = new CanvasPreviewDock(main_win);
+        obs_frontend_add_dock_by_id("JNCanvasPreviewDock", "Canvas 2 - Preview (Detached)", preview_dock);
+        if (preview_dock->parentWidget()) {
+            preview_dock->parentWidget()->setVisible(false);
+        }
+
+        blog(LOG_INFO, "[JNCanvas] Central Canvas View and Control docks attached to OBS Studio successfully.");
     } else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED ||
                event == OBS_FRONTEND_EVENT_SCENE_CHANGED) {
         if (control_dock) {
@@ -75,6 +88,11 @@ void obs_module_unload(void) {
 
     obs_frontend_remove_dock("JNCanvasPreviewDock");
     obs_frontend_remove_dock("JNCanvasControlDock");
+
+    if (central_view) {
+        delete central_view;
+        central_view = nullptr;
+    }
 
     RecordEngine::instance().shutdown();
     CanvasEngine::instance().shutdown();

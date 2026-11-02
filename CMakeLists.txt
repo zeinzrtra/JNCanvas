@@ -45,6 +45,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/record-engine.cpp
   src/ui/canvas-preview-dock.cpp
   src/ui/canvas-control-dock.cpp
+  src/ui/canvas-central-view.cpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
