@@ -1,8 +1,13 @@
 #pragma once
 
 #include <obs.hpp>
+#include <QRect>
+#include <QScreen>
+#include <QString>
+#include <QWidget>
 #include "qt-display.hpp"
-#include "vertical-canvas.hpp"
+
+class CanvasDock;
 
 bool IsAlwaysOnTop(QWidget *window);
 void SetAlwaysOnTop(QWidget *window, bool enable);

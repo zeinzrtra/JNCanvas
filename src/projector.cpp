@@ -5,6 +5,7 @@
 #include <QScreen>
 #include <QWindow>
 #include "projector.hpp"
+#include "vertical-canvas.hpp"
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <util/config-file.h>

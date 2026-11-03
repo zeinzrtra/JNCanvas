@@ -11,7 +11,7 @@
 #include <obs.hpp>
 #include <obs-frontend-api.h>
 
-#include "vertical-canvas.hpp"
+class CanvasDock;
 
 class QLabel;
 class QCheckBox;

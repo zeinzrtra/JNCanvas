@@ -13,6 +13,9 @@
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QMainWindow>
 
 #include <graphics/matrix4.h>
 #include <graphics/vec2.h>

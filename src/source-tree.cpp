@@ -13,6 +13,7 @@
 #include <QStylePainter>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QMainWindow>
 #include <string>
 
 #include "obs-module.h"

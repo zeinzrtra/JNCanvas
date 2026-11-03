@@ -5,6 +5,7 @@
 #include <QMenu>
 #include <QToolBar>
 #include <QWidgetAction>
+#include <QSpinBox>
 
 #include "name-dialog.hpp"
 #include "obs-module.h"

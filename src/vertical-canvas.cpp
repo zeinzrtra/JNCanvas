@@ -1205,7 +1205,6 @@ CanvasDock::CanvasDock(obs_data_t *settings, QWidget *parent)
 		"QPushButton:hover { background: #3e4451; color: #ffffff; }"));
 	connect(fitBtn, &QPushButton::clicked, this, [this] {
 		fixedScaling = false;
-		ResetScaling();
 	});
 	buttonRow->addWidget(fitBtn);
 
@@ -1249,6 +1248,9 @@ CanvasDock::CanvasDock(obs_data_t *settings, QWidget *parent)
 	//signal_handler_connect(sh, "source_create", source_create, this);
 	//signal_handler_connect(sh, "source_load", source_load, this);
 	signal_handler_connect(sh, "source_save", source_save, this);
+
+	obs_data_array_t *start_hotkey = nullptr;
+	obs_data_array_t *stop_hotkey = nullptr;
 
 	virtual_cam_hotkey = obs_hotkey_pair_register_frontend(
 		"VerticalCanvasDockStartVirtualCam",
