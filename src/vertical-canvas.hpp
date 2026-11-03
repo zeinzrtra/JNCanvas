@@ -179,7 +179,6 @@ private:
 	QAction *sourcesDockAction = nullptr;
 	CanvasTransitionsDock *transitionsDock = nullptr;
 	QAction *transitionsDockAction = nullptr;
-	void CloneFromMain();
 
 	obs_hotkey_pair_id stream_hotkey = OBS_INVALID_HOTKEY_PAIR_ID;
 	obs_hotkey_pair_id record_hotkey = OBS_INVALID_HOTKEY_PAIR_ID;
@@ -451,6 +450,10 @@ public:
 	void FinishLoading();
 	void setAction(QAction *action);
 	CanvasScenesDock *GetScenesDock();
+	CanvasSourcesDock *GetSourcesDock() const { return sourcesDock; }
+	void CloneFromMain();
+	void FitScreen() { fixedScaling = false; }
+	void ResetZoom() { fixedScaling = true; scalingAmount = 1.0f; previewScale = 1.0f; }
 	inline uint32_t GetCanvasWidth() const { return canvas_width; }
 	inline uint32_t GetCanvasHeight() const { return canvas_height; }
 	inline video_t *GetVideo() const { return obs_canvas_get_video(canvas); }

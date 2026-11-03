@@ -63,6 +63,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/audio-wrapper-source.h
   src/obs-websocket-api.h
   src/version.h
+  src/ui/canvas-central-view.cpp
+  src/ui/canvas-central-view.hpp
+  src/ui/canvas-view-dock.cpp
+  src/ui/canvas-view-dock.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
