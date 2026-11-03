@@ -13,6 +13,7 @@
 #include <QPoint>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QKeyEvent>
 
 enum class UnifiedViewMode {
     DualView = 0,
@@ -23,15 +24,21 @@ enum class DragMode {
     None = 0,
     PanCanvas = 1,
     MoveItem = 2,
-    ResizeItem = 3
+    ResizeItem = 3,
+    RotateItem = 4
 };
 
 enum class ResizeHandle {
     None = 0,
     TopLeft = 1,
-    TopRight = 2,
-    BottomLeft = 3,
-    BottomRight = 4
+    TopCenter = 2,
+    TopRight = 3,
+    CenterLeft = 4,
+    CenterRight = 5,
+    BottomLeft = 6,
+    BottomCenter = 7,
+    BottomRight = 8,
+    Rot = 9
 };
 
 class UnifiedCanvasDisplay : public QWidget {
@@ -49,8 +56,22 @@ public:
     obs_sceneitem_t *selected_item() const { return selected_item_; }
     void select_item(obs_sceneitem_t *item);
 
+    // Quick Context Actions
+    void add_source_by_id(const char *id, const char *name);
+    void clone_from_main();
+    void transform_fit();
+    void transform_stretch();
+    void transform_center();
+    void transform_reset();
+    void order_move_up();
+    void order_move_down();
+    void remove_selected_item();
+
+    QPaintEngine *paintEngine() const override { return nullptr; }
+
 signals:
     void item_selected(obs_sceneitem_t *item);
+    void sources_changed();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -63,6 +84,8 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private:
     obs_display_t *display_ = nullptr;
@@ -73,6 +96,7 @@ private:
     float zoom_ = 1.0f;
     float pan_x_ = 0.0f;
     float pan_y_ = 0.0f;
+    bool is_space_pressed_ = false;
 
     // Interactive item manipulation
     obs_sceneitem_t *selected_item_ = nullptr;
@@ -80,6 +104,7 @@ private:
     ResizeHandle active_handle_ = ResizeHandle::None;
     struct vec2 initial_item_pos_ = {};
     struct vec2 initial_item_scale_ = {};
+    float initial_item_rot_ = 0.0f;
     QPointF drag_start_scene_pos_ = {};
     QPoint last_mouse_pos_;
 
@@ -97,4 +122,5 @@ private:
     void draw_canvas_frame(float x, float y, float w, float h, float r, float g, float b);
     void draw_selection_box(obs_sceneitem_t *item);
     void draw_texture(gs_texture_t *tex, float x, float y, float w, float h);
+    void show_context_menu(const QPoint &global_pos, float vx, float vy);
 };

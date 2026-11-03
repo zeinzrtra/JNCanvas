@@ -50,12 +50,26 @@ static void on_frontend_event(enum obs_frontend_event event, void *private_data)
         QObject::connect(scenes_dock, &CanvasScenesDock::scene_changed,
                          sources_dock, &CanvasSourcesDock::on_scene_changed);
 
-        // Connect canvas interactive selection with Sources dock
+        // Connect canvas interactive selection with Sources dock and Canvas dock
         if (central_view && central_view->display()) {
-            QObject::connect(central_view->display(), &UnifiedCanvasDisplay::item_selected,
-                             sources_dock, &CanvasSourcesDock::select_sceneitem);
-            QObject::connect(sources_dock, &CanvasSourcesDock::sceneitem_selected,
-                             central_view->display(), &UnifiedCanvasDisplay::select_item);
+            if (sources_dock) {
+                QObject::connect(central_view->display(), &UnifiedCanvasDisplay::item_selected,
+                                 sources_dock, &CanvasSourcesDock::select_sceneitem);
+                QObject::connect(sources_dock, &CanvasSourcesDock::sceneitem_selected,
+                                 central_view->display(), &UnifiedCanvasDisplay::select_item);
+                QObject::connect(central_view->display(), &UnifiedCanvasDisplay::sources_changed,
+                                 sources_dock, &CanvasSourcesDock::refresh_sources);
+            }
+            if (canvas_dock && canvas_dock->sources_dock()) {
+                QObject::connect(central_view->display(), &UnifiedCanvasDisplay::item_selected,
+                                 canvas_dock->sources_dock(), &CanvasSourcesDock::select_sceneitem);
+                QObject::connect(canvas_dock->sources_dock(), &CanvasSourcesDock::sceneitem_selected,
+                                 central_view->display(), &UnifiedCanvasDisplay::select_item);
+                QObject::connect(central_view->display(), &UnifiedCanvasDisplay::sources_changed,
+                                 canvas_dock->sources_dock(), &CanvasSourcesDock::refresh_sources);
+                QObject::connect(scenes_dock, &CanvasScenesDock::scene_changed,
+                                 canvas_dock->sources_dock(), &CanvasSourcesDock::on_scene_changed);
+            }
         }
 
         blog(LOG_INFO, "[JNCanvas] Canvas dock, Scenes dock, and Sources dock registered successfully.");
@@ -66,6 +80,9 @@ static void on_frontend_event(enum obs_frontend_event event, void *private_data)
         }
         if (sources_dock) {
             sources_dock->refresh_sources();
+        }
+        if (canvas_dock && canvas_dock->sources_dock()) {
+            canvas_dock->sources_dock()->refresh_sources();
         }
     }
 }

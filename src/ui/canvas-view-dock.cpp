@@ -13,6 +13,15 @@ CanvasViewDock::CanvasViewDock(CanvasCentralView *central_view, QWidget *parent)
         connect(central_view_, &CanvasCentralView::mode_changed,
                 this, &CanvasViewDock::on_mode_changed);
         update_button_states(central_view_->mode());
+
+        if (central_view_->display() && sources_dock_) {
+            connect(sources_dock_, &CanvasSourcesDock::sceneitem_selected,
+                    central_view_->display(), &UnifiedCanvasDisplay::select_item);
+            connect(central_view_->display(), &UnifiedCanvasDisplay::item_selected,
+                    sources_dock_, &CanvasSourcesDock::select_sceneitem);
+            connect(central_view_->display(), &UnifiedCanvasDisplay::sources_changed,
+                    sources_dock_, &CanvasSourcesDock::refresh_sources);
+        }
     }
 }
 
@@ -27,7 +36,6 @@ void CanvasViewDock::setup_ui() {
     group_layout->setContentsMargins(6, 8, 6, 8);
     group_layout->setSpacing(4);
 
-    // Three main choices as requested: Canvas 1, Canvas 2, Keduanya
     btn_canvas1_ = new QPushButton(tr("🖥️ Canvas 1 (16:9)"), mode_group);
     btn_canvas1_->setCheckable(true);
     btn_canvas1_->setFixedHeight(32);
@@ -66,9 +74,19 @@ void CanvasViewDock::setup_ui() {
     zoom_layout->addWidget(btn_reset_zoom_);
     main_layout->addLayout(zoom_layout);
 
-    // 3. Resolution Info
+    // 3. Embedded Canvas 2 Sources Management
+    sources_group_ = new QGroupBox(tr("Sources (Canvas 2)"), this);
+    QVBoxLayout *sources_layout = new QVBoxLayout(sources_group_);
+    sources_layout->setContentsMargins(4, 8, 4, 6);
+    sources_layout->setSpacing(4);
+
+    sources_dock_ = new CanvasSourcesDock(sources_group_);
+    sources_layout->addWidget(sources_dock_);
+    main_layout->addWidget(sources_group_, 1);
+
+    // 4. Resolution Info
     QVBoxLayout *info_layout = new QVBoxLayout();
-    info_layout->setContentsMargins(2, 4, 2, 2);
+    info_layout->setContentsMargins(2, 2, 2, 2);
     info_layout->setSpacing(2);
 
     info_canvas1_ = new QLabel(tr("• Canvas 1: 1920x1080 (16:9)"), this);
@@ -80,8 +98,6 @@ void CanvasViewDock::setup_ui() {
     info_layout->addWidget(info_canvas1_);
     info_layout->addWidget(info_canvas2_);
     main_layout->addLayout(info_layout);
-
-    main_layout->addStretch(1);
 }
 
 void CanvasViewDock::setup_stylesheet() {
@@ -173,5 +189,16 @@ void CanvasViewDock::update_button_states(CanvasViewMode mode) {
     btn_canvas1_->blockSignals(false);
     btn_canvas2_->blockSignals(false);
     btn_dual_->blockSignals(false);
-}
 
+    if (sources_group_) {
+        if (mode == CanvasViewMode::MainOnly) {
+            sources_group_->setTitle(tr("Sources (Canvas 2 - Vertical)"));
+        } else {
+            sources_group_->setTitle(tr("Sources (Canvas 2) - Active 🟢"));
+        }
+    }
+
+    if (sources_dock_) {
+        sources_dock_->refresh_sources();
+    }
+}

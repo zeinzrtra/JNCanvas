@@ -31,6 +31,7 @@ private slots:
     void on_record_clicked();
     void on_backtrack_clicked();
     void on_selection_changed();
+    void on_clone_main();
     void show_context_menu(const QPoint &pos);
 
 private:
@@ -41,6 +42,7 @@ private:
     QListWidget *source_list_ = nullptr;
     QPushButton *btn_add_ = nullptr;
     QPushButton *btn_remove_ = nullptr;
+    QPushButton *btn_clone_ = nullptr;
     QPushButton *btn_up_ = nullptr;
     QPushButton *btn_down_ = nullptr;
 

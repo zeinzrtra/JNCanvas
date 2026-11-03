@@ -4,6 +4,9 @@
 
 #include "unified-canvas-display.hpp"
 #include "../canvas-engine.hpp"
+#include <obs-frontend-api.h>
+#include <QMenu>
+#include <QAction>
 #include <algorithm>
 #include <cmath>
 
@@ -124,6 +127,26 @@ void UnifiedCanvasDisplay::hideEvent(QHideEvent *event) {
     destroy_display();
 }
 
+void UnifiedCanvasDisplay::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        is_space_pressed_ = true;
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
+}
+
+void UnifiedCanvasDisplay::keyReleaseEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        is_space_pressed_ = false;
+        unsetCursor();
+        event->accept();
+        return;
+    }
+    QWidget::keyReleaseEvent(event);
+}
+
 bool UnifiedCanvasDisplay::map_screen_to_viewport(const QPointF &screen_pos, float &vx, float &vy) const {
     if (zoom_ <= 0.0f) return false;
     const qreal dpr = devicePixelRatioF();
@@ -211,12 +234,25 @@ bool UnifiedCanvasDisplay::get_item_visual_rect(obs_sceneitem_t *item, float &rx
 }
 
 ResizeHandle UnifiedCanvasDisplay::get_handle_at(float vx, float vy, float rx, float ry, float rw, float rh) const {
-    float threshold = 12.0f; // Visual tolerance in viewport pixels
+    float threshold = 14.0f;
+    float mid_x = rx + rw * 0.5f;
+    float mid_y = ry + rh * 0.5f;
+    float rot_y = ry - 25.0f;
 
+    // Rotation handle (top center above box)
+    if (std::hypot(vx - mid_x, vy - rot_y) <= threshold) return ResizeHandle::Rot;
+
+    // 4 Corners
     if (std::abs(vx - rx) <= threshold && std::abs(vy - ry) <= threshold) return ResizeHandle::TopLeft;
     if (std::abs(vx - (rx + rw)) <= threshold && std::abs(vy - ry) <= threshold) return ResizeHandle::TopRight;
     if (std::abs(vx - rx) <= threshold && std::abs(vy - (ry + rh)) <= threshold) return ResizeHandle::BottomLeft;
     if (std::abs(vx - (rx + rw)) <= threshold && std::abs(vy - (ry + rh)) <= threshold) return ResizeHandle::BottomRight;
+
+    // 4 Edge Centers
+    if (std::abs(vx - mid_x) <= threshold && std::abs(vy - ry) <= threshold) return ResizeHandle::TopCenter;
+    if (std::abs(vx - mid_x) <= threshold && std::abs(vy - (ry + rh)) <= threshold) return ResizeHandle::BottomCenter;
+    if (std::abs(vx - rx) <= threshold && std::abs(vy - mid_y) <= threshold) return ResizeHandle::CenterLeft;
+    if (std::abs(vx - (rx + rw)) <= threshold && std::abs(vy - mid_y) <= threshold) return ResizeHandle::CenterRight;
 
     return ResizeHandle::None;
 }
@@ -227,9 +263,9 @@ void UnifiedCanvasDisplay::wheelEvent(QWheelEvent *event) {
 
     is_custom_zoom_ = true;
 
-    float factor = (delta > 0) ? 1.1f : 0.909f;
+    float factor = (delta > 0) ? 1.15f : 0.87f;
     float new_zoom = zoom_ * factor;
-    if (new_zoom < 0.05f || new_zoom > 15.0f) return;
+    if (new_zoom < 0.05f || new_zoom > 20.0f) return;
 
     const qreal dpr = devicePixelRatioF();
     QPointF mouse_pos = event->position() * dpr;
@@ -241,6 +277,17 @@ void UnifiedCanvasDisplay::wheelEvent(QWheelEvent *event) {
 }
 
 void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
+    // 1. Pan requested: Middle button, Space+Left click, Alt/Ctrl+Left click
+    if (event->button() == Qt::MiddleButton ||
+        (event->button() == Qt::LeftButton && is_space_pressed_) ||
+        (event->button() == Qt::LeftButton && (event->modifiers() & (Qt::AltModifier | Qt::ControlModifier)))) {
+        drag_mode_ = DragMode::PanCanvas;
+        last_mouse_pos_ = event->pos();
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+
     float vx = 0.0f, vy = 0.0f;
     if (!map_screen_to_viewport(event->position(), vx, vy)) {
         QWidget::mousePressEvent(event);
@@ -248,13 +295,18 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
     }
 
     if (event->button() == Qt::LeftButton) {
-        // 1. Check if clicking on an active resize handle of selected_item_
+        // 2. Check resize handles on selected item
         if (selected_item_) {
             float rx, ry, rw, rh;
             if (get_item_visual_rect(selected_item_, rx, ry, rw, rh)) {
                 ResizeHandle handle = get_handle_at(vx, vy, rx, ry, rw, rh);
                 if (handle != ResizeHandle::None) {
-                    drag_mode_ = DragMode::ResizeItem;
+                    if (handle == ResizeHandle::Rot) {
+                        drag_mode_ = DragMode::RotateItem;
+                        initial_item_rot_ = obs_sceneitem_get_rot(selected_item_);
+                    } else {
+                        drag_mode_ = DragMode::ResizeItem;
+                    }
                     active_handle_ = handle;
                     obs_sceneitem_get_pos(selected_item_, &initial_item_pos_);
                     obs_sceneitem_get_scale(selected_item_, &initial_item_scale_);
@@ -267,7 +319,7 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
             }
         }
 
-        // 2. Hit-test scene items inside Canvas 2
+        // 3. Hit-test items in Canvas 2
         float sx = 0.0f, sy = 0.0f;
         if (map_viewport_to_canvas2(vx, vy, sx, sy)) {
             obs_scene_t *scene = CanvasEngine::instance().current_scene();
@@ -321,7 +373,6 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
                 event->accept();
                 return;
             } else {
-                // Clicked on empty canvas area -> Deselect
                 if (selected_item_) {
                     selected_item_ = nullptr;
                     emit item_selected(nullptr);
@@ -329,11 +380,8 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
                 }
             }
         }
-    }
 
-    // 3. Middle click, Alt+click, Space+click, or click on background -> Pan canvas
-    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton ||
-        (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier || event->modifiers() & Qt::ControlModifier))) {
+        // 4. Clicked on empty canvas background -> Pan
         drag_mode_ = DragMode::PanCanvas;
         last_mouse_pos_ = event->pos();
         setCursor(Qt::ClosedHandCursor);
@@ -341,7 +389,11 @@ void UnifiedCanvasDisplay::mousePressEvent(QMouseEvent *event) {
         return;
     }
 
-    QWidget::mousePressEvent(event);
+    if (event->button() == Qt::RightButton) {
+        show_context_menu(event->globalPosition().toPoint(), vx, vy);
+        event->accept();
+        return;
+    }
 }
 
 void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
@@ -350,52 +402,89 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
 
     if (drag_mode_ == DragMode::MoveItem && selected_item_) {
         float sx = 0.0f, sy = 0.0f;
-        map_viewport_to_canvas2(vx, vy, sx, sy);
-        float dx = sx - (float)drag_start_scene_pos_.x();
-        float dy = sy - (float)drag_start_scene_pos_.y();
+        if (map_viewport_to_canvas2(vx, vy, sx, sy)) {
+            float dx = sx - (float)drag_start_scene_pos_.x();
+            float dy = sy - (float)drag_start_scene_pos_.y();
 
-        struct vec2 new_pos;
-        vec2_set(&new_pos, initial_item_pos_.x + dx, initial_item_pos_.y + dy);
-        obs_sceneitem_set_pos(selected_item_, &new_pos);
-        update();
-        event->accept();
-        return;
+            struct vec2 new_pos;
+            new_pos.x = initial_item_pos_.x + dx;
+            new_pos.y = initial_item_pos_.y + dy;
+
+            obs_sceneitem_set_pos(selected_item_, &new_pos);
+            update();
+            event->accept();
+            return;
+        }
     }
 
     if (drag_mode_ == DragMode::ResizeItem && selected_item_) {
         float sx = 0.0f, sy = 0.0f;
         map_viewport_to_canvas2(vx, vy, sx, sy);
         float dx = sx - (float)drag_start_scene_pos_.x();
+        float dy = sy - (float)drag_start_scene_pos_.y();
 
         obs_source_t *src = obs_sceneitem_get_source(selected_item_);
-        float sw = src ? (float)obs_source_get_width(src) : 100.0f;
-        float sh = src ? (float)obs_source_get_height(src) : 100.0f;
+        float sw = src ? (float)obs_source_get_width(src) : 1080.0f;
+        float sh = src ? (float)obs_source_get_height(src) : 1920.0f;
         if (sw <= 0.0f) sw = 1080.0f;
         if (sh <= 0.0f) sh = 1920.0f;
 
         struct vec2 new_scale = initial_item_scale_;
         struct vec2 new_pos = initial_item_pos_;
 
-        if (active_handle_ == ResizeHandle::BottomRight) {
+        switch (active_handle_) {
+        case ResizeHandle::BottomRight: {
             float new_w = initial_item_scale_.x * sw + dx;
             new_scale.x = (std::max)(0.01f, new_w / sw);
             new_scale.y = (initial_item_scale_.y / initial_item_scale_.x) * new_scale.x;
-        } else if (active_handle_ == ResizeHandle::BottomLeft) {
+            break;
+        }
+        case ResizeHandle::BottomLeft: {
             float new_w = initial_item_scale_.x * sw - dx;
             new_scale.x = (std::max)(0.01f, new_w / sw);
             new_scale.y = (initial_item_scale_.y / initial_item_scale_.x) * new_scale.x;
             new_pos.x = initial_item_pos_.x + (initial_item_scale_.x - new_scale.x) * sw;
-        } else if (active_handle_ == ResizeHandle::TopRight) {
+            break;
+        }
+        case ResizeHandle::TopRight: {
             float new_w = initial_item_scale_.x * sw + dx;
             new_scale.x = (std::max)(0.01f, new_w / sw);
             new_scale.y = (initial_item_scale_.y / initial_item_scale_.x) * new_scale.x;
             new_pos.y = initial_item_pos_.y + (initial_item_scale_.y - new_scale.y) * sh;
-        } else if (active_handle_ == ResizeHandle::TopLeft) {
+            break;
+        }
+        case ResizeHandle::TopLeft: {
             float new_w = initial_item_scale_.x * sw - dx;
             new_scale.x = (std::max)(0.01f, new_w / sw);
             new_scale.y = (initial_item_scale_.y / initial_item_scale_.x) * new_scale.x;
             new_pos.x = initial_item_pos_.x + (initial_item_scale_.x - new_scale.x) * sw;
             new_pos.y = initial_item_pos_.y + (initial_item_scale_.y - new_scale.y) * sh;
+            break;
+        }
+        case ResizeHandle::CenterRight: {
+            float new_w = initial_item_scale_.x * sw + dx;
+            new_scale.x = (std::max)(0.01f, new_w / sw);
+            break;
+        }
+        case ResizeHandle::CenterLeft: {
+            float new_w = initial_item_scale_.x * sw - dx;
+            new_scale.x = (std::max)(0.01f, new_w / sw);
+            new_pos.x = initial_item_pos_.x + (initial_item_scale_.x - new_scale.x) * sw;
+            break;
+        }
+        case ResizeHandle::BottomCenter: {
+            float new_h = initial_item_scale_.y * sh + dy;
+            new_scale.y = (std::max)(0.01f, new_h / sh);
+            break;
+        }
+        case ResizeHandle::TopCenter: {
+            float new_h = initial_item_scale_.y * sh - dy;
+            new_scale.y = (std::max)(0.01f, new_h / sh);
+            new_pos.y = initial_item_pos_.y + (initial_item_scale_.y - new_scale.y) * sh;
+            break;
+        }
+        default:
+            break;
         }
 
         obs_sceneitem_set_pos(selected_item_, &new_pos);
@@ -403,6 +492,21 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
         update();
         event->accept();
         return;
+    }
+
+    if (drag_mode_ == DragMode::RotateItem && selected_item_) {
+        float sx = 0.0f, sy = 0.0f;
+        map_viewport_to_canvas2(vx, vy, sx, sy);
+        float rx, ry, rw, rh;
+        if (get_item_visual_rect(selected_item_, rx, ry, rw, rh)) {
+            float mid_x = rx + rw * 0.5f;
+            float mid_y = ry + rh * 0.5f;
+            float angle = std::atan2(vy - mid_y, vx - mid_x) * 180.0f / 3.14159265f + 90.0f;
+            obs_sceneitem_set_rot(selected_item_, angle);
+            update();
+            event->accept();
+            return;
+        }
     }
 
     if (drag_mode_ == DragMode::PanCanvas) {
@@ -417,19 +521,41 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
     }
 
     // Hover cursor feedback
+    if (is_space_pressed_) {
+        setCursor(Qt::OpenHandCursor);
+        return;
+    }
+
     if (selected_item_) {
         float rx, ry, rw, rh;
         if (get_item_visual_rect(selected_item_, rx, ry, rw, rh)) {
             ResizeHandle handle = get_handle_at(vx, vy, rx, ry, rw, rh);
-            if (handle == ResizeHandle::TopLeft || handle == ResizeHandle::BottomRight) {
+            switch (handle) {
+            case ResizeHandle::TopLeft:
+            case ResizeHandle::BottomRight:
                 setCursor(Qt::SizeFDiagCursor);
                 return;
-            } else if (handle == ResizeHandle::TopRight || handle == ResizeHandle::BottomLeft) {
+            case ResizeHandle::TopRight:
+            case ResizeHandle::BottomLeft:
                 setCursor(Qt::SizeBDiagCursor);
                 return;
-            } else if (vx >= rx && vx <= rx + rw && vy >= ry && vy <= ry + rh) {
-                setCursor(Qt::SizeAllCursor);
+            case ResizeHandle::TopCenter:
+            case ResizeHandle::BottomCenter:
+                setCursor(Qt::SizeVerCursor);
                 return;
+            case ResizeHandle::CenterLeft:
+            case ResizeHandle::CenterRight:
+                setCursor(Qt::SizeHorCursor);
+                return;
+            case ResizeHandle::Rot:
+                setCursor(Qt::CrossCursor);
+                return;
+            case ResizeHandle::None:
+                if (vx >= rx && vx <= rx + rw && vy >= ry && vy <= ry + rh) {
+                    setCursor(Qt::SizeAllCursor);
+                    return;
+                }
+                break;
             }
         }
     }
@@ -441,13 +567,274 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
 void UnifiedCanvasDisplay::mouseReleaseEvent(QMouseEvent *event) {
     drag_mode_ = DragMode::None;
     active_handle_ = ResizeHandle::None;
-    unsetCursor();
+    if (is_space_pressed_) {
+        setCursor(Qt::OpenHandCursor);
+    } else {
+        unsetCursor();
+    }
     QWidget::mouseReleaseEvent(event);
 }
 
 void UnifiedCanvasDisplay::mouseDoubleClickEvent(QMouseEvent *event) {
-    Q_UNUSED(event);
+    float vx = 0.0f, vy = 0.0f;
+    if (map_screen_to_viewport(event->position(), vx, vy)) {
+        float sx = 0.0f, sy = 0.0f;
+        if (map_viewport_to_canvas2(vx, vy, sx, sy) && selected_item_) {
+            obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+            if (src) {
+                obs_frontend_open_source_properties(src);
+                event->accept();
+                return;
+            }
+        }
+    }
+    // Double click on empty space: Fit to screen
     fit_to_screen();
+    event->accept();
+}
+
+void UnifiedCanvasDisplay::show_context_menu(const QPoint &global_pos, float, float) {
+    QMenu menu(this);
+    menu.setStyleSheet(R"(
+        QMenu {
+            background-color: #21252b;
+            color: #abb2bf;
+            border: 1px solid #3e4451;
+            padding: 4px;
+        }
+        QMenu::item {
+            padding: 6px 20px 6px 24px;
+        }
+        QMenu::item:selected {
+            background-color: #2c313a;
+            color: #ffffff;
+        }
+        QMenu::separator {
+            height: 1px;
+            background: #3e4451;
+            margin: 4px 8px;
+        }
+    )");
+
+    // 1. Add Source submenu
+    QMenu *add_menu = menu.addMenu(tr("➕ Tambah Sumber"));
+    auto add_src_act = [&](const QString &label, const char *id) {
+        QAction *act = add_menu->addAction(label);
+        connect(act, &QAction::triggered, [this, id, label]() {
+            add_source_by_id(id, label.toUtf8().constData());
+        });
+    };
+    add_src_act(tr("Tangkapan Layar (Display Capture)"), "monitor_capture");
+    add_src_act(tr("Tangkapan Jendela (Window Capture)"), "window_capture");
+    add_src_act(tr("Perangkat Perekam Video (Kamera)"), "dshow_input");
+    add_src_act(tr("Tangkapan Game (Game Capture)"), "game_capture");
+    add_src_act(tr("Peramban (Browser)"), "browser_source");
+    add_src_act(tr("Gambar (Image)"), "image_source");
+    add_src_act(tr("Sumber Media (Media Source)"), "ffmpeg_source");
+    add_src_act(tr("Sumber Warna (Color Source)"), "color_source");
+    add_src_act(tr("Teks (GDI+)"), "text_gdiplus");
+
+    // 2. Clone from Main OBS Scene
+    QAction *clone_act = menu.addAction(tr("📋 Clone dari Canvas 1 (Main OBS Scene)"));
+    connect(clone_act, &QAction::triggered, this, &UnifiedCanvasDisplay::clone_from_main);
+
+    menu.addSeparator();
+
+    if (selected_item_) {
+        obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+        const char *name = src ? obs_source_get_name(src) : "Source";
+
+        // Transform submenu
+        QMenu *transform_menu = menu.addMenu(tr("📐 Transform"));
+        QAction *act_fit = transform_menu->addAction(tr("Paskan ke Layar (Fit to Screen)"));
+        connect(act_fit, &QAction::triggered, this, &UnifiedCanvasDisplay::transform_fit);
+
+        QAction *act_stretch = transform_menu->addAction(tr("Regangkan ke Layar (Stretch to Screen)"));
+        connect(act_stretch, &QAction::triggered, this, &UnifiedCanvasDisplay::transform_stretch);
+
+        QAction *act_center = transform_menu->addAction(tr("Pusatkan ke Layar (Center to Screen)"));
+        connect(act_center, &QAction::triggered, this, &UnifiedCanvasDisplay::transform_center);
+
+        QAction *act_reset = transform_menu->addAction(tr("Reset Transform"));
+        connect(act_reset, &QAction::triggered, this, &UnifiedCanvasDisplay::transform_reset);
+
+        // Order submenu
+        QMenu *order_menu = menu.addMenu(tr("📑 Urutan (Order)"));
+        QAction *act_up = order_menu->addAction(tr("Pindah ke Atas"));
+        connect(act_up, &QAction::triggered, this, &UnifiedCanvasDisplay::order_move_up);
+
+        QAction *act_down = order_menu->addAction(tr("Pindah ke Bawah"));
+        connect(act_down, &QAction::triggered, this, &UnifiedCanvasDisplay::order_move_down);
+
+        menu.addSeparator();
+
+        if (src) {
+            QAction *act_props = menu.addAction(tr("⚙️ Properties"));
+            connect(act_props, &QAction::triggered, [src]() {
+                obs_frontend_open_source_properties(src);
+            });
+
+            QAction *act_filters = menu.addAction(tr("🎨 Filters"));
+            connect(act_filters, &QAction::triggered, [src]() {
+                obs_frontend_open_source_filters(src);
+            });
+
+            menu.addSeparator();
+        }
+
+        QAction *act_del = menu.addAction(tr("🗑️ Hapus Sumber (%1)").arg(QString::fromUtf8(name)));
+        connect(act_del, &QAction::triggered, this, &UnifiedCanvasDisplay::remove_selected_item);
+    }
+
+    menu.exec(global_pos);
+}
+
+void UnifiedCanvasDisplay::add_source_by_id(const char *id, const char *name) {
+    obs_scene_t *scene = CanvasEngine::instance().current_scene();
+    if (!scene) return;
+
+    obs_source_t *src = obs_source_create(id, name, nullptr, nullptr);
+    if (!src) return;
+
+    obs_sceneitem_t *item = obs_scene_add(scene, src);
+    if (item) {
+        uint32_t sw = obs_source_get_width(src);
+        uint32_t cw = CanvasEngine::instance().width();
+        if (sw > 0 && cw > 0 && sw > cw) {
+            float scale = (float)cw / (float)sw;
+            struct vec2 s = {scale, scale};
+            obs_sceneitem_set_scale(item, &s);
+        }
+        selected_item_ = item;
+        emit item_selected(selected_item_);
+        emit sources_changed();
+    }
+    obs_source_release(src);
+    update();
+}
+
+void UnifiedCanvasDisplay::clone_from_main() {
+    obs_scene_t *dest_scene = CanvasEngine::instance().current_scene();
+    obs_source_t *main_scene_src = obs_frontend_get_current_scene();
+    if (!dest_scene || !main_scene_src) return;
+
+    obs_scene_t *main_scene = obs_scene_from_source(main_scene_src);
+    if (main_scene) {
+        obs_scene_enum_items(
+            main_scene,
+            [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
+                auto *dest = static_cast<obs_scene_t *>(param);
+                obs_source_t *src = obs_sceneitem_get_source(item);
+                if (src) {
+                    obs_sceneitem_t *new_item = obs_scene_add(dest, src);
+                    if (new_item) {
+                        struct vec2 pos, scale;
+                        obs_sceneitem_get_pos(item, &pos);
+                        obs_sceneitem_get_scale(item, &scale);
+                        obs_sceneitem_set_pos(new_item, &pos);
+                        obs_sceneitem_set_scale(new_item, &scale);
+                    }
+                }
+                return true;
+            },
+            dest_scene);
+        emit sources_changed();
+    }
+    obs_source_release(main_scene_src);
+    update();
+}
+
+void UnifiedCanvasDisplay::transform_fit() {
+    if (!selected_item_) return;
+    obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+    if (!src) return;
+
+    uint32_t sw = obs_source_get_width(src);
+    uint32_t sh = obs_source_get_height(src);
+    uint32_t cw = CanvasEngine::instance().width();
+    uint32_t ch = CanvasEngine::instance().height();
+    if (sw == 0 || sh == 0) return;
+
+    float scale = (std::min)((float)cw / (float)sw, (float)ch / (float)sh);
+    struct vec2 s = {scale, scale};
+    struct vec2 pos = {((float)cw - (float)sw * scale) * 0.5f,
+                       ((float)ch - (float)sh * scale) * 0.5f};
+    obs_sceneitem_set_pos(selected_item_, &pos);
+    obs_sceneitem_set_scale(selected_item_, &s);
+    update();
+}
+
+void UnifiedCanvasDisplay::transform_stretch() {
+    if (!selected_item_) return;
+    obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+    if (!src) return;
+
+    uint32_t sw = obs_source_get_width(src);
+    uint32_t sh = obs_source_get_height(src);
+    uint32_t cw = CanvasEngine::instance().width();
+    uint32_t ch = CanvasEngine::instance().height();
+    if (sw == 0 || sh == 0) return;
+
+    struct vec2 s = {(float)cw / (float)sw, (float)ch / (float)sh};
+    struct vec2 pos = {0.0f, 0.0f};
+    obs_sceneitem_set_pos(selected_item_, &pos);
+    obs_sceneitem_set_scale(selected_item_, &s);
+    update();
+}
+
+void UnifiedCanvasDisplay::transform_center() {
+    if (!selected_item_) return;
+    obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+    if (!src) return;
+
+    uint32_t sw = obs_source_get_width(src);
+    uint32_t sh = obs_source_get_height(src);
+    uint32_t cw = CanvasEngine::instance().width();
+    uint32_t ch = CanvasEngine::instance().height();
+
+    struct vec2 scale;
+    obs_sceneitem_get_scale(selected_item_, &scale);
+    struct vec2 pos = {((float)cw - (float)sw * scale.x) * 0.5f,
+                       ((float)ch - (float)sh * scale.y) * 0.5f};
+    obs_sceneitem_set_pos(selected_item_, &pos);
+    update();
+}
+
+void UnifiedCanvasDisplay::transform_reset() {
+    if (!selected_item_) return;
+    struct vec2 s = {1.0f, 1.0f};
+    struct vec2 pos = {0.0f, 0.0f};
+    obs_sceneitem_set_pos(selected_item_, &pos);
+    obs_sceneitem_set_scale(selected_item_, &s);
+    obs_sceneitem_set_rot(selected_item_, 0.0f);
+    update();
+}
+
+void UnifiedCanvasDisplay::order_move_up() {
+    if (!selected_item_) return;
+    int order = (int)obs_sceneitem_get_order_position(selected_item_);
+    obs_sceneitem_set_order_position(selected_item_, order + 1);
+    emit sources_changed();
+    update();
+}
+
+void UnifiedCanvasDisplay::order_move_down() {
+    if (!selected_item_) return;
+    int order = (int)obs_sceneitem_get_order_position(selected_item_);
+    if (order > 0) {
+        obs_sceneitem_set_order_position(selected_item_, order - 1);
+        emit sources_changed();
+        update();
+    }
+}
+
+void UnifiedCanvasDisplay::remove_selected_item() {
+    if (!selected_item_) return;
+    obs_sceneitem_remove(selected_item_);
+    selected_item_ = nullptr;
+    emit item_selected(nullptr);
+    emit sources_changed();
+    update();
 }
 
 void UnifiedCanvasDisplay::draw_solid_rect(float x, float y, float w, float h, float r, float g, float b, float a) {
@@ -481,7 +868,7 @@ void UnifiedCanvasDisplay::draw_canvas_frame(float x, float y, float w, float h,
     float border = 3.0f;
     // Outer border frame
     draw_solid_rect(x - border, y - border, w + border * 2.0f, h + border * 2.0f, r, g, b, 1.0f);
-    // Inner black canvas backing (ensures non-transparent solid canvas)
+    // Inner solid black canvas backing
     draw_solid_rect(x, y, w, h, 0.0f, 0.0f, 0.0f, 1.0f);
 }
 
@@ -492,24 +879,41 @@ void UnifiedCanvasDisplay::draw_selection_box(obs_sceneitem_t *item) {
     if (!get_item_visual_rect(item, rx, ry, rw, rh)) return;
 
     float thickness = 2.0f;
-    // Red color: #ff3b30 -> (1.0f, 0.23f, 0.19f, 1.0f)
+    // Red color: #ff3b30
     draw_solid_rect(rx, ry, rw, thickness, 1.0f, 0.23f, 0.19f, 1.0f);
     draw_solid_rect(rx, ry + rh - thickness, rw, thickness, 1.0f, 0.23f, 0.19f, 1.0f);
     draw_solid_rect(rx, ry, thickness, rh, 1.0f, 0.23f, 0.19f, 1.0f);
     draw_solid_rect(rx + rw - thickness, ry, thickness, rh, 1.0f, 0.23f, 0.19f, 1.0f);
 
-    // 4 Corner handles (white squares with red outline)
-    float hs = 7.0f;
+    float mid_x = rx + rw * 0.5f;
+    float mid_y = ry + rh * 0.5f;
+    float rot_y = ry - 25.0f;
+
+    // Stem line to rotation handle
+    draw_solid_rect(mid_x - 1.0f, rot_y, 2.0f, 25.0f, 1.0f, 0.23f, 0.19f, 1.0f);
+    // Rotation circular handle
+    float rot_size = 9.0f;
+    draw_solid_rect(mid_x - rot_size * 0.5f, rot_y - rot_size * 0.5f, rot_size, rot_size, 1.0f, 0.23f, 0.19f, 1.0f);
+
+    // 8 handles (white squares with red outline)
+    float hs = 8.0f;
     float hsh = hs * 0.5f;
     auto draw_handle = [this, hs, hsh](float cx, float cy) {
         draw_solid_rect(cx - hsh - 1.0f, cy - hsh - 1.0f, hs + 2.0f, hs + 2.0f, 1.0f, 0.23f, 0.19f, 1.0f);
         draw_solid_rect(cx - hsh, cy - hsh, hs, hs, 1.0f, 1.0f, 1.0f, 1.0f);
     };
 
+    // 4 corners
     draw_handle(rx, ry);
     draw_handle(rx + rw, ry);
     draw_handle(rx, ry + rh);
     draw_handle(rx + rw, ry + rh);
+
+    // 4 edge midpoints
+    draw_handle(mid_x, ry);
+    draw_handle(mid_x, ry + rh);
+    draw_handle(rx, mid_y);
+    draw_handle(rx + rw, mid_y);
 }
 
 void UnifiedCanvasDisplay::draw_texture(gs_texture_t *tex, float x, float y, float w, float h) {
@@ -540,7 +944,7 @@ void UnifiedCanvasDisplay::draw_callback(void *param, uint32_t cx, uint32_t cy) 
 void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     if (cx < 10 || cy < 10) return;
 
-    // 1. Draw workspace background (OBS dark canvas gray #141619)
+    // 1. Draw workspace background
     draw_solid_rect(0.0f, 0.0f, (float)cx, (float)cy, 0.078f, 0.086f, 0.098f, 1.0f);
 
     obs_video_info ovi = {};
@@ -555,7 +959,7 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     if (vert_w == 0) vert_w = 1080;
     if (vert_h == 0) vert_h = 1920;
 
-    // Off-screen render Canvas 2 at native 1080x1920 resolution to preserve exact aspect ratio
+    // Off-screen render Canvas 2 at native 1080x1920 resolution
     obs_view_t *view = CanvasEngine::instance().view();
     if (view && vert_texrender_) {
         if (gs_texrender_begin(vert_texrender_, vert_w, vert_h)) {
@@ -568,16 +972,15 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     }
     gs_texture_t *vert_tex = vert_texrender_ ? gs_texrender_get_texture(vert_texrender_) : nullptr;
 
-    float base_h = (float)main_h; // Visual reference height = 1080.0f
-    float aspect_vert = (float)vert_w / (float)vert_h; // 1080 / 1920 = 0.5625 (9:16)
-    float draw_vert_w = base_h * aspect_vert; // 1080 * 0.5625 = 607.5f
-    float draw_vert_h = base_h; // 1080.0f -> EXACT SAME HEIGHT AS MAIN!
+    float base_h = (float)main_h;
+    float aspect_vert = (float)vert_w / (float)vert_h;
+    float draw_vert_w = base_h * aspect_vert;
+    float draw_vert_h = base_h;
 
     float gap = 40.0f;
     float total_w = (mode_ == UnifiedViewMode::DualView) ? ((float)main_w + gap + draw_vert_w) : draw_vert_w;
     float total_h = base_h;
 
-    // Dynamically calculate auto-fit zoom and perfect mathematical center in actual viewport (cx, cy)
     float scale_x = (float)cx / total_w;
     float scale_y = (float)cy / total_h;
     float auto_zoom = (std::min)(scale_x, scale_y) * 0.94f;
@@ -590,10 +993,18 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
         pan_y_ = auto_pan_y;
     }
 
-    // 2. Apply viewport transformation (Zoom & Pan applied together to all canvases)
     gs_matrix_push();
     gs_matrix_translate3f(pan_x_, pan_y_, 0.0f);
     gs_matrix_scale3f(zoom_, zoom_, 1.0f);
+
+    obs_scene_t *c2_scene = CanvasEngine::instance().current_scene();
+    bool has_items = false;
+    if (c2_scene) {
+        obs_scene_enum_items(c2_scene, [](obs_scene_t *, obs_sceneitem_t *, void *p) -> bool {
+            *static_cast<bool *>(p) = true;
+            return false;
+        }, &has_items);
+    }
 
     if (mode_ == UnifiedViewMode::DualView) {
         float main_x = 0.0f;
@@ -601,31 +1012,41 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
         float vert_x = (float)main_w + gap;
         float vert_y = 0.0f;
 
-        // Render Canvas 1 (Main 16:9)
+        // Render Canvas 1
         draw_canvas_frame(main_x, main_y, (float)main_w, (float)main_h, 0.35f, 0.38f, 0.45f);
         gs_matrix_push();
         gs_matrix_translate3f(main_x, main_y, 0.0f);
         obs_render_main_texture();
         gs_matrix_pop();
 
-        // Render Canvas 2 (Vertical 9:16) - EXACT SAME VISUAL HEIGHT!
+        // Render Canvas 2
         draw_canvas_frame(vert_x, vert_y, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
         if (vert_tex) {
             draw_texture(vert_tex, vert_x, vert_y, draw_vert_w, draw_vert_h);
         }
 
-        // Draw interactive red bounding box on Canvas 2 selected item
+        // Empty canvas visual guide
+        if (!has_items) {
+            draw_solid_rect(vert_x + draw_vert_w * 0.15f, vert_y + draw_vert_h * 0.49f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
+            draw_solid_rect(vert_x + draw_vert_w * 0.15f, vert_y + draw_vert_h * 0.51f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
+        }
+
         if (selected_item_) {
             draw_selection_box(selected_item_);
         }
     } else {
-        // Mode == Canvas2Only: Centered 9:16 vertical canvas (matching height)
+        // Render Canvas 2 Only
         draw_canvas_frame(0.0f, 0.0f, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
         if (vert_tex) {
             draw_texture(vert_tex, 0.0f, 0.0f, draw_vert_w, draw_vert_h);
         }
 
-        // Draw interactive red bounding box on Canvas 2 selected item
+        // Empty canvas visual guide
+        if (!has_items) {
+            draw_solid_rect(draw_vert_w * 0.15f, draw_vert_h * 0.49f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
+            draw_solid_rect(draw_vert_w * 0.15f, draw_vert_h * 0.51f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
+        }
+
         if (selected_item_) {
             draw_selection_box(selected_item_);
         }

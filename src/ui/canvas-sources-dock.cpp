@@ -78,10 +78,16 @@ void CanvasSourcesDock::setup_ui() {
     btn_down_->setToolTip(tr("Move Down"));
     connect(btn_down_, &QPushButton::clicked, this, &CanvasSourcesDock::on_move_down);
 
+    btn_clone_ = new QPushButton(tr("📋 Clone Main"), this);
+    btn_clone_->setFixedHeight(24);
+    btn_clone_->setToolTip(tr("Clone all sources from main OBS scene to Canvas 2"));
+    connect(btn_clone_, &QPushButton::clicked, this, &CanvasSourcesDock::on_clone_main);
+
     btn_layout->addWidget(btn_add_);
     btn_layout->addWidget(btn_remove_);
     btn_layout->addWidget(btn_up_);
     btn_layout->addWidget(btn_down_);
+    btn_layout->addWidget(btn_clone_);
     btn_layout->addStretch(1);
 
     // Quick REC & CLIP buttons
@@ -396,3 +402,34 @@ void CanvasSourcesDock::show_context_menu(const QPoint &pos) {
         }
     }
 }
+
+void CanvasSourcesDock::on_clone_main() {
+    obs_scene_t *dest_scene = CanvasEngine::instance().current_scene();
+    obs_source_t *main_scene_src = obs_frontend_get_current_scene();
+    if (!dest_scene || !main_scene_src) return;
+
+    obs_scene_t *main_scene = obs_scene_from_source(main_scene_src);
+    if (main_scene) {
+        obs_scene_enum_items(
+            main_scene,
+            [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
+                auto *dest = static_cast<obs_scene_t *>(param);
+                obs_source_t *src = obs_sceneitem_get_source(item);
+                if (src) {
+                    obs_sceneitem_t *new_item = obs_scene_add(dest, src);
+                    if (new_item) {
+                        struct vec2 pos, scale;
+                        obs_sceneitem_get_pos(item, &pos);
+                        obs_sceneitem_get_scale(item, &scale);
+                        obs_sceneitem_set_pos(new_item, &pos);
+                        obs_sceneitem_set_scale(new_item, &scale);
+                    }
+                }
+                return true;
+            },
+            dest_scene);
+        refresh_sources();
+    }
+    obs_source_release(main_scene_src);
+}
+
