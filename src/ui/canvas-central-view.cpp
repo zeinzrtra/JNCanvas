@@ -1,4 +1,5 @@
 #include "canvas-central-view.hpp"
+#include "../canvas-engine.hpp"
 #include <obs-module.h>
 #include <QGridLayout>
 #include <QBoxLayout>
@@ -106,6 +107,7 @@ void CanvasCentralView::apply_mode(CanvasViewMode mode) {
         if (unified_display_) {
             unified_display_->show();
             unified_display_->set_mode(UnifiedViewMode::Canvas2Only);
+            auto_populate_if_empty();
         }
         break;
     case CanvasViewMode::DualView:
@@ -113,7 +115,27 @@ void CanvasCentralView::apply_mode(CanvasViewMode mode) {
         if (unified_display_) {
             unified_display_->show();
             unified_display_->set_mode(UnifiedViewMode::DualView);
+            auto_populate_if_empty();
         }
         break;
+    }
+}
+
+void CanvasCentralView::auto_populate_if_empty() {
+    obs_scene_t *scene = CanvasEngine::instance().current_scene();
+    if (!scene) return;
+
+    bool has_items = false;
+    obs_scene_enum_items(
+        scene,
+        [](obs_scene_t *, obs_sceneitem_t *, void *p) -> bool {
+            *static_cast<bool *>(p) = true;
+            return false;
+        },
+        &has_items);
+
+    if (!has_items && unified_display_) {
+        blog(LOG_INFO, "[JNCanvas] Canvas 2 is empty. Auto-cloning sources from main scene...");
+        unified_display_->clone_from_main();
     }
 }

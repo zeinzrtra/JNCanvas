@@ -35,4 +35,5 @@ private:
 
     void setup_unified_display();
     void apply_mode(CanvasViewMode mode);
+    void auto_populate_if_empty();
 };

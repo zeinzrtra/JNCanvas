@@ -179,8 +179,9 @@ void CanvasSourcesDock::refresh_sources() {
                     bool locked = obs_sceneitem_locked(item);
 
                     QString prefix = QString("%1 %2 ").arg(visible ? "👁" : "🕶", locked ? "🔒" : "🔓");
-                    QListWidgetItem *list_item = new QListWidgetItem(prefix + QString::fromUtf8(name), list);
+                    QListWidgetItem *list_item = new QListWidgetItem(prefix + QString::fromUtf8(name));
                     list_item->setData(Qt::UserRole, QVariant::fromValue(static_cast<void *>(item)));
+                    list->insertItem(0, list_item);
                 }
                 return true;
             },
@@ -408,26 +409,51 @@ void CanvasSourcesDock::on_clone_main() {
     obs_source_t *main_scene_src = obs_frontend_get_current_scene();
     if (!dest_scene || !main_scene_src) return;
 
+    obs_video_info ovi = {};
+    uint32_t main_w = 1920, main_h = 1080;
+    if (obs_get_video_info(&ovi)) {
+        main_w = ovi.base_width;
+        main_h = ovi.base_height;
+    }
+    uint32_t cw = CanvasEngine::instance().width();
+    uint32_t ch = CanvasEngine::instance().height();
+    if (cw == 0) cw = 1080;
+    if (ch == 0) ch = 1920;
+
+    float ratio = (main_w > 0) ? ((float)cw / (float)main_w) : 1.0f;
+    float scaled_h = (float)main_h * ratio;
+    float offset_y = ((float)ch - scaled_h) * 0.5f;
+
+    struct CloneContext {
+        obs_scene_t *dest;
+        float ratio;
+        float offset_y;
+    } ctx = {dest_scene, ratio, offset_y};
+
     obs_scene_t *main_scene = obs_scene_from_source(main_scene_src);
     if (main_scene) {
         obs_scene_enum_items(
             main_scene,
             [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
-                auto *dest = static_cast<obs_scene_t *>(param);
+                auto *c = static_cast<CloneContext *>(param);
                 obs_source_t *src = obs_sceneitem_get_source(item);
                 if (src) {
-                    obs_sceneitem_t *new_item = obs_scene_add(dest, src);
+                    obs_sceneitem_t *new_item = obs_scene_add(c->dest, src);
                     if (new_item) {
                         struct vec2 pos, scale;
                         obs_sceneitem_get_pos(item, &pos);
                         obs_sceneitem_get_scale(item, &scale);
-                        obs_sceneitem_set_pos(new_item, &pos);
-                        obs_sceneitem_set_scale(new_item, &scale);
+
+                        struct vec2 new_pos = {pos.x * c->ratio, c->offset_y + pos.y * c->ratio};
+                        struct vec2 new_scale = {scale.x * c->ratio, scale.y * c->ratio};
+
+                        obs_sceneitem_set_pos(new_item, &new_pos);
+                        obs_sceneitem_set_scale(new_item, &new_scale);
                     }
                 }
                 return true;
             },
-            dest_scene);
+            &ctx);
         refresh_sources();
     }
     obs_source_release(main_scene_src);

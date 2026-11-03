@@ -127,6 +127,14 @@ void UnifiedCanvasDisplay::hideEvent(QHideEvent *event) {
     destroy_display();
 }
 
+void UnifiedCanvasDisplay::leaveEvent(QEvent *event) {
+    QWidget::leaveEvent(event);
+    if (hovered_item_) {
+        hovered_item_ = nullptr;
+        update();
+    }
+}
+
 void UnifiedCanvasDisplay::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
         is_space_pressed_ = true;
@@ -406,9 +414,60 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
             float dx = sx - (float)drag_start_scene_pos_.x();
             float dy = sy - (float)drag_start_scene_pos_.y();
 
+            float target_x = initial_item_pos_.x + dx;
+            float target_y = initial_item_pos_.y + dy;
+
+            obs_source_t *src = obs_sceneitem_get_source(selected_item_);
+            float sw = src ? (float)obs_source_get_width(src) : 1080.0f;
+            float sh = src ? (float)obs_source_get_height(src) : 1920.0f;
+            if (sw <= 0.0f) sw = 1080.0f;
+            if (sh <= 0.0f) sh = 1920.0f;
+
+            float item_w = sw * initial_item_scale_.x;
+            float item_h = sh * initial_item_scale_.y;
+            float cw = (float)CanvasEngine::instance().width();
+            float ch = (float)CanvasEngine::instance().height();
+            if (cw <= 0.0f) cw = 1080.0f;
+            if (ch <= 0.0f) ch = 1920.0f;
+
+            // Snap to Canvas 2 edges
+            float snap_thr = 14.0f;
+            snap_x_ = false;
+            snap_y_ = false;
+
+            // X-Axis Snapping
+            if (std::abs(target_x - 0.0f) < snap_thr) {
+                target_x = 0.0f;
+                snap_x_ = true;
+                snap_x_pos_ = 0.0f;
+            } else if (std::abs((target_x + item_w * 0.5f) - cw * 0.5f) < snap_thr) {
+                target_x = cw * 0.5f - item_w * 0.5f;
+                snap_x_ = true;
+                snap_x_pos_ = cw * 0.5f;
+            } else if (std::abs((target_x + item_w) - cw) < snap_thr) {
+                target_x = cw - item_w;
+                snap_x_ = true;
+                snap_x_pos_ = cw;
+            }
+
+            // Y-Axis Snapping
+            if (std::abs(target_y - 0.0f) < snap_thr) {
+                target_y = 0.0f;
+                snap_y_ = true;
+                snap_y_pos_ = 0.0f;
+            } else if (std::abs((target_y + item_h * 0.5f) - ch * 0.5f) < snap_thr) {
+                target_y = ch * 0.5f - item_h * 0.5f;
+                snap_y_ = true;
+                snap_y_pos_ = ch * 0.5f;
+            } else if (std::abs((target_y + item_h) - ch) < snap_thr) {
+                target_y = ch - item_h;
+                snap_y_ = true;
+                snap_y_pos_ = ch;
+            }
+
             struct vec2 new_pos;
-            new_pos.x = initial_item_pos_.x + dx;
-            new_pos.y = initial_item_pos_.y + dy;
+            new_pos.x = target_x;
+            new_pos.y = target_y;
 
             obs_sceneitem_set_pos(selected_item_, &new_pos);
             update();
@@ -520,10 +579,57 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
         return;
     }
 
-    // Hover cursor feedback
+    // Hover cursor & boundary feedback
     if (is_space_pressed_) {
         setCursor(Qt::OpenHandCursor);
         return;
+    }
+
+    // Hit-test for hover
+    float sx = 0.0f, sy = 0.0f;
+    obs_sceneitem_t *hit_item = nullptr;
+    if (map_viewport_to_canvas2(vx, vy, sx, sy)) {
+        obs_scene_t *scene = CanvasEngine::instance().current_scene();
+        if (scene) {
+            struct HitContext {
+                float sx, sy;
+                obs_sceneitem_t *hit;
+            } ctx = {sx, sy, nullptr};
+
+            obs_scene_enum_items(
+                scene,
+                [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
+                    auto *c = static_cast<HitContext *>(param);
+                    if (!obs_sceneitem_visible(item) || obs_sceneitem_locked(item)) return true;
+
+                    struct vec2 pos, scale;
+                    obs_sceneitem_get_pos(item, &pos);
+                    obs_sceneitem_get_scale(item, &scale);
+                    obs_source_t *src = obs_sceneitem_get_source(item);
+                    if (!src) return true;
+
+                    float sw = (float)obs_source_get_width(src);
+                    float sh = (float)obs_source_get_height(src);
+                    if (sw <= 0.0f) sw = (float)CanvasEngine::instance().width();
+                    if (sh <= 0.0f) sh = (float)CanvasEngine::instance().height();
+
+                    float w = sw * scale.x;
+                    float h = sh * scale.y;
+
+                    if (c->sx >= pos.x && c->sx <= pos.x + w && c->sy >= pos.y && c->sy <= pos.y + h) {
+                        c->hit = item;
+                    }
+                    return true;
+                },
+                &ctx);
+
+            hit_item = ctx.hit;
+        }
+    }
+
+    if (hovered_item_ != hit_item) {
+        hovered_item_ = hit_item;
+        update();
     }
 
     if (selected_item_) {
@@ -567,11 +673,14 @@ void UnifiedCanvasDisplay::mouseMoveEvent(QMouseEvent *event) {
 void UnifiedCanvasDisplay::mouseReleaseEvent(QMouseEvent *event) {
     drag_mode_ = DragMode::None;
     active_handle_ = ResizeHandle::None;
+    snap_x_ = false;
+    snap_y_ = false;
     if (is_space_pressed_) {
         setCursor(Qt::OpenHandCursor);
     } else {
         unsetCursor();
     }
+    update();
     QWidget::mouseReleaseEvent(event);
 }
 
@@ -588,7 +697,6 @@ void UnifiedCanvasDisplay::mouseDoubleClickEvent(QMouseEvent *event) {
             }
         }
     }
-    // Double click on empty space: Fit to screen
     fit_to_screen();
     event->accept();
 }
@@ -718,26 +826,58 @@ void UnifiedCanvasDisplay::clone_from_main() {
     obs_source_t *main_scene_src = obs_frontend_get_current_scene();
     if (!dest_scene || !main_scene_src) return;
 
+    obs_video_info ovi = {};
+    uint32_t main_w = 1920, main_h = 1080;
+    if (obs_get_video_info(&ovi)) {
+        main_w = ovi.base_width;
+        main_h = ovi.base_height;
+    }
+    uint32_t cw = CanvasEngine::instance().width();
+    uint32_t ch = CanvasEngine::instance().height();
+    if (cw == 0) cw = 1080;
+    if (ch == 0) ch = 1920;
+
+    float ratio = (main_w > 0) ? ((float)cw / (float)main_w) : 1.0f;
+    float scaled_h = (float)main_h * ratio;
+    float offset_y = ((float)ch - scaled_h) * 0.5f;
+
+    struct CloneContext {
+        obs_scene_t *dest;
+        float ratio;
+        float offset_y;
+        obs_sceneitem_t *first_item;
+    } ctx = {dest_scene, ratio, offset_y, nullptr};
+
     obs_scene_t *main_scene = obs_scene_from_source(main_scene_src);
     if (main_scene) {
         obs_scene_enum_items(
             main_scene,
             [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
-                auto *dest = static_cast<obs_scene_t *>(param);
+                auto *c = static_cast<CloneContext *>(param);
                 obs_source_t *src = obs_sceneitem_get_source(item);
                 if (src) {
-                    obs_sceneitem_t *new_item = obs_scene_add(dest, src);
+                    obs_sceneitem_t *new_item = obs_scene_add(c->dest, src);
                     if (new_item) {
                         struct vec2 pos, scale;
                         obs_sceneitem_get_pos(item, &pos);
                         obs_sceneitem_get_scale(item, &scale);
-                        obs_sceneitem_set_pos(new_item, &pos);
-                        obs_sceneitem_set_scale(new_item, &scale);
+
+                        struct vec2 new_pos = {pos.x * c->ratio, c->offset_y + pos.y * c->ratio};
+                        struct vec2 new_scale = {scale.x * c->ratio, scale.y * c->ratio};
+
+                        obs_sceneitem_set_pos(new_item, &new_pos);
+                        obs_sceneitem_set_scale(new_item, &new_scale);
+                        if (!c->first_item) c->first_item = new_item;
                     }
                 }
                 return true;
             },
-            dest_scene);
+            &ctx);
+
+        if (ctx.first_item) {
+            selected_item_ = ctx.first_item;
+            emit item_selected(selected_item_);
+        }
         emit sources_changed();
     }
     obs_source_release(main_scene_src);
@@ -866,10 +1006,33 @@ void UnifiedCanvasDisplay::draw_solid_rect(float x, float y, float w, float h, f
 void UnifiedCanvasDisplay::draw_canvas_frame(float x, float y, float w, float h, float r, float g, float b) {
     if (w <= 0.0f || h <= 0.0f) return;
     float border = 3.0f;
-    // Outer border frame
     draw_solid_rect(x - border, y - border, w + border * 2.0f, h + border * 2.0f, r, g, b, 1.0f);
-    // Inner solid black canvas backing
     draw_solid_rect(x, y, w, h, 0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+void UnifiedCanvasDisplay::draw_hover_box(obs_sceneitem_t *item) {
+    if (!item) return;
+
+    float rx, ry, rw, rh;
+    if (!get_item_visual_rect(item, rx, ry, rw, rh)) return;
+
+    float thickness = 2.0f;
+    // Cyan hover outline (#00b4d8)
+    draw_solid_rect(rx, ry, rw, thickness, 0.0f, 0.705f, 0.847f, 1.0f);
+    draw_solid_rect(rx, ry + rh - thickness, rw, thickness, 0.0f, 0.705f, 0.847f, 1.0f);
+    draw_solid_rect(rx, ry, thickness, rh, 0.0f, 0.705f, 0.847f, 1.0f);
+    draw_solid_rect(rx + rw - thickness, ry, thickness, rh, 0.0f, 0.705f, 0.847f, 1.0f);
+}
+
+void UnifiedCanvasDisplay::draw_snap_lines(float c2_x, float c2_y, float c2_w, float c2_h, float scale_c2) {
+    if (snap_x_) {
+        float vx = c2_x + snap_x_pos_ * scale_c2;
+        draw_solid_rect(vx - 1.0f, c2_y, 2.0f, c2_h, 1.0f, 0.23f, 0.19f, 0.85f);
+    }
+    if (snap_y_) {
+        float vy = c2_y + snap_y_pos_ * scale_c2;
+        draw_solid_rect(c2_x, vy - 1.0f, c2_w, 2.0f, 1.0f, 0.23f, 0.19f, 0.85f);
+    }
 }
 
 void UnifiedCanvasDisplay::draw_selection_box(obs_sceneitem_t *item) {
@@ -878,8 +1041,8 @@ void UnifiedCanvasDisplay::draw_selection_box(obs_sceneitem_t *item) {
     float rx, ry, rw, rh;
     if (!get_item_visual_rect(item, rx, ry, rw, rh)) return;
 
-    float thickness = 2.0f;
-    // Red color: #ff3b30
+    float thickness = 2.5f;
+    // Solid red bounding box (#ff3b30)
     draw_solid_rect(rx, ry, rw, thickness, 1.0f, 0.23f, 0.19f, 1.0f);
     draw_solid_rect(rx, ry + rh - thickness, rw, thickness, 1.0f, 0.23f, 0.19f, 1.0f);
     draw_solid_rect(rx, ry, thickness, rh, 1.0f, 0.23f, 0.19f, 1.0f);
@@ -891,11 +1054,11 @@ void UnifiedCanvasDisplay::draw_selection_box(obs_sceneitem_t *item) {
 
     // Stem line to rotation handle
     draw_solid_rect(mid_x - 1.0f, rot_y, 2.0f, 25.0f, 1.0f, 0.23f, 0.19f, 1.0f);
-    // Rotation circular handle
+    // Red circular knob on top
     float rot_size = 9.0f;
     draw_solid_rect(mid_x - rot_size * 0.5f, rot_y - rot_size * 0.5f, rot_size, rot_size, 1.0f, 0.23f, 0.19f, 1.0f);
 
-    // 8 handles (white squares with red outline)
+    // 8 resize handles (white squares with red outline)
     float hs = 8.0f;
     float hsh = hs * 0.5f;
     auto draw_handle = [this, hs, hsh](float cx, float cy) {
@@ -976,6 +1139,7 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     float aspect_vert = (float)vert_w / (float)vert_h;
     float draw_vert_w = base_h * aspect_vert;
     float draw_vert_h = base_h;
+    float scale_c2 = draw_vert_h / (float)vert_h;
 
     float gap = 40.0f;
     float total_w = (mode_ == UnifiedViewMode::DualView) ? ((float)main_w + gap + draw_vert_w) : draw_vert_w;
@@ -997,20 +1161,13 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
     gs_matrix_translate3f(pan_x_, pan_y_, 0.0f);
     gs_matrix_scale3f(zoom_, zoom_, 1.0f);
 
-    obs_scene_t *c2_scene = CanvasEngine::instance().current_scene();
-    bool has_items = false;
-    if (c2_scene) {
-        obs_scene_enum_items(c2_scene, [](obs_scene_t *, obs_sceneitem_t *, void *p) -> bool {
-            *static_cast<bool *>(p) = true;
-            return false;
-        }, &has_items);
-    }
+    float c2_x = 0.0f;
+    float c2_y = 0.0f;
 
     if (mode_ == UnifiedViewMode::DualView) {
         float main_x = 0.0f;
         float main_y = 0.0f;
-        float vert_x = (float)main_w + gap;
-        float vert_y = 0.0f;
+        c2_x = (float)main_w + gap;
 
         // Render Canvas 1
         draw_canvas_frame(main_x, main_y, (float)main_w, (float)main_h, 0.35f, 0.38f, 0.45f);
@@ -1020,36 +1177,31 @@ void UnifiedCanvasDisplay::render(uint32_t cx, uint32_t cy) {
         gs_matrix_pop();
 
         // Render Canvas 2
-        draw_canvas_frame(vert_x, vert_y, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
+        draw_canvas_frame(c2_x, c2_y, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
         if (vert_tex) {
-            draw_texture(vert_tex, vert_x, vert_y, draw_vert_w, draw_vert_h);
-        }
-
-        // Empty canvas visual guide
-        if (!has_items) {
-            draw_solid_rect(vert_x + draw_vert_w * 0.15f, vert_y + draw_vert_h * 0.49f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
-            draw_solid_rect(vert_x + draw_vert_w * 0.15f, vert_y + draw_vert_h * 0.51f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
-        }
-
-        if (selected_item_) {
-            draw_selection_box(selected_item_);
+            draw_texture(vert_tex, c2_x, c2_y, draw_vert_w, draw_vert_h);
         }
     } else {
         // Render Canvas 2 Only
-        draw_canvas_frame(0.0f, 0.0f, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
+        c2_x = 0.0f;
+        c2_y = 0.0f;
+        draw_canvas_frame(c2_x, c2_y, draw_vert_w, draw_vert_h, 0.30f, 0.58f, 1.0f);
         if (vert_tex) {
-            draw_texture(vert_tex, 0.0f, 0.0f, draw_vert_w, draw_vert_h);
+            draw_texture(vert_tex, c2_x, c2_y, draw_vert_w, draw_vert_h);
         }
+    }
 
-        // Empty canvas visual guide
-        if (!has_items) {
-            draw_solid_rect(draw_vert_w * 0.15f, draw_vert_h * 0.49f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
-            draw_solid_rect(draw_vert_w * 0.15f, draw_vert_h * 0.51f, draw_vert_w * 0.7f, 2.0f, 0.3f, 0.6f, 1.0f, 0.5f);
-        }
+    // 1. Draw snapping lines when dragging
+    draw_snap_lines(c2_x, c2_y, draw_vert_w, draw_vert_h, scale_c2);
 
-        if (selected_item_) {
-            draw_selection_box(selected_item_);
-        }
+    // 2. Draw hover outline ("batas ujung source")
+    if (hovered_item_ && hovered_item_ != selected_item_) {
+        draw_hover_box(hovered_item_);
+    }
+
+    // 3. Draw selection box (red outline + 8 handles + rot knob)
+    if (selected_item_) {
+        draw_selection_box(selected_item_);
     }
 
     gs_matrix_pop();

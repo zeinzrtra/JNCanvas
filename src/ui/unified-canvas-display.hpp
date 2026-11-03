@@ -86,6 +86,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
     obs_display_t *display_ = nullptr;
@@ -98,8 +99,9 @@ private:
     float pan_y_ = 0.0f;
     bool is_space_pressed_ = false;
 
-    // Interactive item manipulation
+    // Interactive item manipulation & Gizmo
     obs_sceneitem_t *selected_item_ = nullptr;
+    obs_sceneitem_t *hovered_item_ = nullptr;
     DragMode drag_mode_ = DragMode::None;
     ResizeHandle active_handle_ = ResizeHandle::None;
     struct vec2 initial_item_pos_ = {};
@@ -107,6 +109,12 @@ private:
     float initial_item_rot_ = 0.0f;
     QPointF drag_start_scene_pos_ = {};
     QPoint last_mouse_pos_;
+
+    // Snapping lines
+    bool snap_x_ = false;
+    float snap_x_pos_ = 0.0f;
+    bool snap_y_ = false;
+    float snap_y_pos_ = 0.0f;
 
     void create_display();
     void destroy_display();
@@ -121,6 +129,8 @@ private:
     void draw_solid_rect(float x, float y, float w, float h, float r, float g, float b, float a);
     void draw_canvas_frame(float x, float y, float w, float h, float r, float g, float b);
     void draw_selection_box(obs_sceneitem_t *item);
+    void draw_hover_box(obs_sceneitem_t *item);
+    void draw_snap_lines(float c2_x, float c2_y, float c2_w, float c2_h, float scale_c2);
     void draw_texture(gs_texture_t *tex, float x, float y, float w, float h);
     void show_context_menu(const QPoint &global_pos, float vx, float vy);
 };
