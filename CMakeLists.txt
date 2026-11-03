@@ -24,8 +24,8 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core REQUIRED)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
+  find_package(Qt6 COMPONENTS Widgets Core Gui REQUIRED)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui)
   set_target_properties(
     ${CMAKE_PROJECT_NAME}
     PROPERTIES AUTOMOC ON AUTOUIC ON AUTORCC ON
@@ -40,14 +40,29 @@ target_include_directories(${CMAKE_PROJECT_NAME}
 )
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-  src/plugin-main.cpp
-  src/canvas-engine.cpp
-  src/record-engine.cpp
-  src/ui/canvas-central-view.cpp
-  src/ui/unified-canvas-display.cpp
-  src/ui/canvas-scenes-dock.cpp
-  src/ui/canvas-sources-dock.cpp
-  src/ui/canvas-view-dock.cpp
+  src/vertical-canvas.cpp
+  src/vertical-canvas.hpp
+  src/scenes-dock.cpp
+  src/scenes-dock.hpp
+  src/sources-dock.cpp
+  src/sources-dock.hpp
+  src/source-tree.cpp
+  src/source-tree.hpp
+  src/transitions-dock.cpp
+  src/transitions-dock.hpp
+  src/qt-display.cpp
+  src/qt-display.hpp
+  src/projector.cpp
+  src/projector.hpp
+  src/name-dialog.cpp
+  src/name-dialog.hpp
+  src/display-helpers.hpp
+  src/multi-canvas-source.c
+  src/multi-canvas-source.h
+  src/audio-wrapper-source.c
+  src/audio-wrapper-source.h
+  src/obs-websocket-api.h
+  src/version.h
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
