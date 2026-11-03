@@ -29,6 +29,8 @@ ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
 UninstallDisplayIcon={app}\bin\64bit\{#MyAppExeName}
 PrivilegesRequired=admin
+CloseApplications=yes
+CloseApplicationsFilter=obs64.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
