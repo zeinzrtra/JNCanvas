@@ -877,31 +877,10 @@ bool CanvasDock::HasScene(QString sceneName) const
 	return false;
 }
 
-void CanvasDock::CheckReplayBuffer(bool start)
+void CanvasDock::CheckReplayBuffer(bool)
 {
-	if (replayAlwaysOn) {
-		StartReplayBuffer();
-		return;
-	}
-	if (start && !startReplay) {
-		return;
-	}
-	bool active = obs_frontend_streaming_active() || obs_frontend_recording_active() || obs_frontend_replay_buffer_active() ||
-		      (recordOutput && obs_output_active(recordOutput));
-	for (auto it = streamOutputs.begin(); !active && it != streamOutputs.end(); ++it) {
-		active = it->enabled && it->output && !it->stopping && obs_output_active(it->output);
-	}
-
-	if (start && active) {
-		StartReplayBuffer();
-	} else if (!active) {
-		if (!start) {
-			StopReplayBuffer();
-		}
-		if (canvas && obs_canvas_has_video(canvas)) {
-			DestroyVideo();
-		}
-	}
+	// Outputs disabled
+	return;
 }
 
 void CanvasDock::CreateScenesRow()
@@ -951,7 +930,7 @@ CanvasDock::CanvasDock(obs_data_t *settings, QWidget *parent)
 {
 	if (!settings) {
 		settings = obs_data_create();
-		obs_data_set_bool(settings, "backtrack", true);
+		obs_data_set_bool(settings, "backtrack", false);
 		first_time = true;
 	}
 	partnerBlockTime = (time_t)obs_data_get_int(settings, "partner_block");
@@ -981,7 +960,7 @@ CanvasDock::CanvasDock(obs_data_t *settings, QWidget *parent)
 	recordingMatchMain = obs_data_get_bool(settings, "recording_match_main");
 
 	audioBitrate = (uint32_t)obs_data_get_int(settings, "audio_bitrate");
-	startReplay = obs_data_get_bool(settings, "backtrack");
+	startReplay = false;
 	replayAlwaysOn = false;
 	replayDuration = (uint32_t)obs_data_get_int(settings, "backtrack_seconds");
 	replayPath = obs_data_get_string(settings, "backtrack_path");
@@ -1086,13 +1065,7 @@ CanvasDock::CanvasDock(obs_data_t *settings, QWidget *parent)
 	setLayout(mainLayout);
 
 	const QString title = QString::fromUtf8(obs_module_text("Vertical"));
-
-	const QString replayName = title + " " + QString::fromUtf8(obs_module_text("Backtrack"));
-	auto hotkeyData = obs_data_get_obj(settings, "backtrack_hotkeys");
-	replayOutput = obs_output_create("replay_buffer", replayName.toUtf8().constData(), nullptr, hotkeyData);
-	obs_data_release(hotkeyData);
-	auto rpsh = obs_output_get_signal_handler(replayOutput);
-	signal_handler_connect(rpsh, "saved", replay_saved, this);
+	replayOutput = nullptr;
 
 	if (obs_data_get_bool(settings, "scenes_row")) {
 		CreateScenesRow();
@@ -1422,52 +1395,56 @@ CanvasDock::~CanvasDock()
 
 	std::list<obs_output_t *> outputsToStop;
 
-	if (obs_output_active(recordOutput)) {
-		obs_output_stop(recordOutput);
-		outputsToStop.push_back(recordOutput);
-	} else {
-		auto old_enc = obs_output_get_video_encoder(recordOutput);
-		for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
-			auto old_audio_enc = obs_output_get_audio_encoder(recordOutput, i);
-			if (old_audio_enc) {
-				obs_encoder_release(old_audio_enc);
+	if (recordOutput) {
+		if (obs_output_active(recordOutput)) {
+			obs_output_stop(recordOutput);
+			outputsToStop.push_back(recordOutput);
+		} else {
+			auto old_enc = obs_output_get_video_encoder(recordOutput);
+			for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
+				auto old_audio_enc = obs_output_get_audio_encoder(recordOutput, i);
+				if (old_audio_enc) {
+					obs_encoder_release(old_audio_enc);
+				}
 			}
+			obs_output_release(recordOutput);
+			obs_encoder_release(old_enc);
 		}
-		obs_output_release(recordOutput);
-		obs_encoder_release(old_enc);
+		recordOutput = nullptr;
 	}
-	recordOutput = nullptr;
 
 	if (replayOutput) {
 		auto rpsh = obs_output_get_signal_handler(replayOutput);
 		signal_handler_disconnect(rpsh, "saved", replay_saved, this);
-	}
 
-	if (obs_output_active(replayOutput)) {
-		obs_output_stop(replayOutput);
-		outputsToStop.push_back(replayOutput);
-	} else {
-		auto old_enc = obs_output_get_video_encoder(replayOutput);
-		obs_encoder_release(old_enc);
-		for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
-			auto old_audio_enc = obs_output_get_audio_encoder(replayOutput, i);
-			if (old_audio_enc) {
-				obs_encoder_release(old_audio_enc);
+		if (obs_output_active(replayOutput)) {
+			obs_output_stop(replayOutput);
+			outputsToStop.push_back(replayOutput);
+		} else {
+			auto old_enc = obs_output_get_video_encoder(replayOutput);
+			obs_encoder_release(old_enc);
+			for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
+				auto old_audio_enc = obs_output_get_audio_encoder(replayOutput, i);
+				if (old_audio_enc) {
+					obs_encoder_release(old_audio_enc);
+				}
 			}
+			obs_output_release(replayOutput);
 		}
-		obs_output_release(replayOutput);
+		replayOutput = nullptr;
 	}
-	replayOutput = nullptr;
 
-	if (obs_output_active(virtualCamOutput)) {
-		obs_output_stop(virtualCamOutput);
-		outputsToStop.push_back(virtualCamOutput);
-	} else {
-		auto old_enc = obs_output_get_video_encoder(virtualCamOutput);
-		obs_output_release(virtualCamOutput);
-		obs_encoder_release(old_enc);
+	if (virtualCamOutput) {
+		if (obs_output_active(virtualCamOutput)) {
+			obs_output_stop(virtualCamOutput);
+			outputsToStop.push_back(virtualCamOutput);
+		} else {
+			auto old_enc = obs_output_get_video_encoder(virtualCamOutput);
+			obs_output_release(virtualCamOutput);
+			obs_encoder_release(old_enc);
+		}
+		virtualCamOutput = nullptr;
 	}
-	virtualCamOutput = nullptr;
 
 	for (auto it = streamOutputs.begin(); it != streamOutputs.end(); ++it) {
 		if (obs_output_active(it->output)) {
@@ -1475,7 +1452,7 @@ CanvasDock::~CanvasDock()
 			obs_service_release(it->service);
 			it->service = nullptr;
 			outputsToStop.push_back(it->output);
-		} else {
+		} else if (it->output) {
 			auto old_enc = obs_output_get_video_encoder(it->output);
 			obs_service_release(it->service);
 			for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
@@ -5011,14 +4988,18 @@ void CanvasDock::virtual_cam_output_stop(void *data, calldata_t *calldata)
 
 void CanvasDock::OnVirtualCamStart()
 {
-	virtualCamButton->setIcon(virtualCamActiveIcon);
-	virtualCamButton->setChecked(true);
+	if (virtualCamButton) {
+		virtualCamButton->setIcon(virtualCamActiveIcon);
+		virtualCamButton->setChecked(true);
+	}
 }
 
 void CanvasDock::OnVirtualCamStop()
 {
-	virtualCamButton->setIcon(virtualCamInactiveIcon);
-	virtualCamButton->setChecked(false);
+	if (virtualCamButton) {
+		virtualCamButton->setIcon(virtualCamInactiveIcon);
+		virtualCamButton->setChecked(false);
+	}
 	CheckReplayBuffer();
 	if (multiCanvasSource) {
 		multi_canvas_source_remove_canvas(obs_obj_get_data(multiCanvasSource), canvas);
@@ -5050,7 +5031,7 @@ void CanvasDock::StartVirtualCam()
 	CheckReplayBuffer(true);
 	const auto output = obs_frontend_get_virtualcam_output();
 	if (obs_output_active(output)) {
-		if (!virtualCamOutput) {
+		if (!virtualCamOutput && virtualCamButton) {
 			virtualCamButton->setChecked(false);
 		}
 		obs_output_release(output);
@@ -5156,7 +5137,9 @@ void CanvasDock::StartVirtualCam()
 void CanvasDock::StopVirtualCam()
 {
 	if (!obs_output_active(virtualCamOutput)) {
-		virtualCamButton->setChecked(false);
+		if (virtualCamButton) {
+			virtualCamButton->setChecked(false);
+		}
 		return;
 	}
 	SendVendorEvent("virtual_camera_stopping");
@@ -5173,12 +5156,12 @@ void CanvasDock::ConfigButtonClicked()
 void CanvasDock::ReplayButtonClicked(QString filename)
 {
 	if (!obs_output_active(replayOutput)) {
-		if (replayButton->isChecked()) {
+		if (replayButton && replayButton->isChecked()) {
 			replayButton->setChecked(false);
 		}
 		return;
 	}
-	if (!replayButton->isChecked()) {
+	if (replayButton && !replayButton->isChecked()) {
 		replayButton->setChecked(true);
 	}
 	obs_data_t *s = obs_output_get_settings(replayOutput);
@@ -5196,7 +5179,9 @@ void CanvasDock::ReplayButtonClicked(QString filename)
 	proc_handler_call(ph, "save", &cd);
 	calldata_free(&cd);
 
-	statusLabel->setText(QString::fromUtf8(obs_module_text("Saving")));
+	if (statusLabel) {
+		statusLabel->setText(QString::fromUtf8(obs_module_text("Saving")));
+	}
 	replayStatusResetTimer.start(10000);
 	SendVendorEvent("backtrack_saving");
 }
@@ -5464,7 +5449,9 @@ void CanvasDock::StartRecord()
 
 void CanvasDock::StopRecord()
 {
-	recordButton->setChecked(false);
+	if (recordButton) {
+		recordButton->setChecked(false);
+	}
 	if (obs_output_active(recordOutput)) {
 		SendVendorEvent("recording_stopping");
 		obs_output_stop(recordOutput);
@@ -5645,6 +5632,12 @@ void CanvasDock::ShowNoReplayOutputError()
 }
 
 void CanvasDock::StartReplayBuffer()
+{
+	return;
+}
+
+#if 0
+void CanvasDock::StartReplayBuffer_Disabled()
 {
 	if (obs_output_active(replayOutput)) {
 		return;
@@ -5827,6 +5820,7 @@ void CanvasDock::StartReplayBuffer()
 		QMetaObject::invokeMethod(this, "OnReplayBufferStart");
 	}
 }
+#endif
 
 #define SIMPLE_ENCODER_X264 "x264"
 #define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
@@ -6142,12 +6136,7 @@ obs_encoder_t *CanvasDock::GetRecordVideoEncoder()
 
 void CanvasDock::StopReplayBuffer()
 {
-	QMetaObject::invokeMethod(this, "OnReplayBufferStop", Q_ARG(int, OBS_OUTPUT_SUCCESS),
-				  Q_ARG(QString, QString::fromUtf8("")));
-	if (obs_output_active(replayOutput)) {
-		SendVendorEvent("backtrack_stopping");
-		obs_output_stop(replayOutput);
-	}
+	return;
 }
 
 void CanvasDock::replay_output_start(void *data, calldata_t *calldata)
@@ -6726,7 +6715,9 @@ void CanvasDock::StartStream()
 
 void CanvasDock::StopStream()
 {
-	streamButton->setChecked(false);
+	if (streamButton) {
+		streamButton->setChecked(false);
+	}
 	bool done = false;
 	for (auto it = streamOutputs.begin(); it != streamOutputs.end(); ++it) {
 		if (obs_output_active(it->output)) {
@@ -7524,10 +7515,12 @@ void CanvasDock::FinishLoading()
 
 void CanvasDock::OnRecordStart()
 {
-	recordButton->setChecked(true);
-	recordButton->setIcon(recordActiveIcon);
-	recordButton->setText("00:00");
-	recordButton->setChecked(true);
+	if (recordButton) {
+		recordButton->setChecked(true);
+		recordButton->setIcon(recordActiveIcon);
+		recordButton->setText("00:00");
+		recordButton->setChecked(true);
+	}
 	CheckReplayBuffer(true);
 }
 
@@ -7570,18 +7563,22 @@ void CanvasDock::TryRemux(QString path)
 
 void CanvasDock::OnRecordStop(int code, QString last_error)
 {
-	recordButton->setChecked(false);
-	recordButton->setIcon(recordInactiveIcon);
-	recordButton->setText("");
-	recordButton->setChecked(false);
+	if (recordButton) {
+		recordButton->setChecked(false);
+		recordButton->setIcon(recordInactiveIcon);
+		recordButton->setText("");
+		recordButton->setChecked(false);
+	}
 	HandleRecordError(code, last_error);
 	CheckReplayBuffer();
 	QTimer::singleShot(500, this, [this] { CheckReplayBuffer(); });
-	obs_data_t *s = obs_output_get_settings(recordOutput);
-	std::string path = obs_data_get_string(s, "path");
-	obs_data_release(s);
-	if (!path.empty()) {
-		TryRemux(QString::fromUtf8(path.c_str()));
+	if (recordOutput) {
+		obs_data_t *s = obs_output_get_settings(recordOutput);
+		std::string path = obs_data_get_string(s, "path");
+		obs_data_release(s);
+		if (!path.empty()) {
+			TryRemux(QString::fromUtf8(path.c_str()));
+		}
 	}
 }
 
@@ -7621,7 +7618,9 @@ void CanvasDock::HandleRecordError(int code, QString last_error)
 void CanvasDock::OnReplaySaved()
 {
 	std::string path;
-	statusLabel->setText(QString::fromUtf8(obs_module_text("Saved")));
+	if (statusLabel) {
+		statusLabel->setText(QString::fromUtf8(obs_module_text("Saved")));
+	}
 	if (replayOutput) {
 		proc_handler_t *ph = obs_output_get_proc_handler(replayOutput);
 		if (ph) {
@@ -7643,10 +7642,12 @@ void CanvasDock::OnReplaySaved()
 
 void CanvasDock::OnStreamStart()
 {
-	streamButton->setChecked(true);
-	streamButton->setIcon(streamActiveIcon);
-	streamButton->setText("00:00");
-	streamButton->setChecked(true);
+	if (streamButton) {
+		streamButton->setChecked(true);
+		streamButton->setIcon(streamActiveIcon);
+		streamButton->setText("00:00");
+		streamButton->setChecked(true);
+	}
 	CheckReplayBuffer(true);
 }
 
@@ -7663,7 +7664,7 @@ void CanvasDock::OnStreamStop(int code, QString last_error, QString stream_serve
 			active = true;
 		}
 	}
-	if (!active) {
+	if (!active && streamButton) {
 		streamButton->setChecked(false);
 		streamButton->setIcon(streamInactiveIcon);
 		streamButton->setText("");
@@ -7742,14 +7743,18 @@ void CanvasDock::OnStreamStop(int code, QString last_error, QString stream_serve
 
 void CanvasDock::OnReplayBufferStart()
 {
-	replayButton->setIcon(replayActiveIcon);
-	replayButton->setChecked(true);
+	if (replayButton) {
+		replayButton->setIcon(replayActiveIcon);
+		replayButton->setChecked(true);
+	}
 }
 
 void CanvasDock::OnReplayBufferStop(int code, QString last_error)
 {
-	replayButton->setIcon(replayInactiveIcon);
-	replayButton->setChecked(false);
+	if (replayButton) {
+		replayButton->setIcon(replayInactiveIcon);
+		replayButton->setChecked(false);
+	}
 	if (!replayStatusResetTimer.isActive()) {
 		replayStatusResetTimer.start(4000);
 	}
@@ -8742,16 +8747,20 @@ void CanvasDock::UpdateMulti()
 		}
 	}
 	if (enabled_count > 1 && !multi_rtmp) {
-		streamButtonMulti->setVisible(true);
+		if (streamButtonMulti) streamButtonMulti->setVisible(true);
 		multi_rtmp = true;
-		streamButton->setChecked(active_count > 0);
-		streamButton->setStyleSheet(QString::fromUtf8(
-			"QPushButton:checked{background: rgb(0,210,153);} QPushButton{border-top-right-radius: 0; border-bottom-right-radius: 0;}"));
+		if (streamButton) {
+			streamButton->setChecked(active_count > 0);
+			streamButton->setStyleSheet(QString::fromUtf8(
+				"QPushButton:checked{background: rgb(0,210,153);} QPushButton{border-top-right-radius: 0; border-bottom-right-radius: 0;}"));
+		}
 	} else if (enabled_count <= 1 && multi_rtmp) {
-		streamButtonMulti->setVisible(false);
+		if (streamButtonMulti) streamButtonMulti->setVisible(false);
 		multi_rtmp = false;
-		streamButton->setChecked(active_count > 0);
-		streamButton->setStyleSheet(QString::fromUtf8("QPushButton:checked{background: rgb(0,210,153);}"));
+		if (streamButton) {
+			streamButton->setChecked(active_count > 0);
+			streamButton->setStyleSheet(QString::fromUtf8("QPushButton:checked{background: rgb(0,210,153);}"));
+		}
 	}
 }
 

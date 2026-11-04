@@ -39,6 +39,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Copy plugin dll directly from the build configuration directory
 Source: "..\release\{#Configuration}\jn-canvas\bin\64bit\jn-canvas.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
 Source: "..\data\*"; DestDir: "{app}\data\obs-plugins\jn-canvas"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "Uninstall-JNCanvas.bat"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
+
+[UninstallDelete]
+Type: files; Name: "{app}\obs-plugins\64bit\jn-canvas.*"
+Type: files; Name: "{app}\obs-plugins\64bit\Uninstall-JNCanvas.bat"
+Type: filesandordirs; Name: "{app}\data\obs-plugins\jn-canvas"
+Type: filesandordirs; Name: "{userappdata}\obs-studio\plugin_config\jn-canvas"
 
 [Code]
 function InitializeSetup(): Boolean;
@@ -50,4 +57,14 @@ begin
   begin
     Log('Detected OBS installation at: ' + OBSPath);
   end;
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  ErrorCode: Integer;
+begin
+  Result := True;
+  // Automatically terminate OBS Studio if open so DLL is unlocked
+  ShellExec('open', 'taskkill.exe', '/F /IM obs64.exe', '', SW_HIDE, ewWaitUntilTerminated, ErrorCode);
+  Sleep(1000);
 end;

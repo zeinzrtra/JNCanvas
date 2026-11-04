@@ -76,6 +76,12 @@ function Package {
         & $InnoCompiler "/DConfiguration=$Configuration" $IssPath
         Log-Group
     }
+
+    # Copy Standalone Uninstaller to release folder
+    $CleanerBat = "$ProjectRoot\installer\Uninstall-JNCanvas.bat"
+    if (Test-Path $CleanerBat) {
+        Copy-Item -Path $CleanerBat -Destination "${ProjectRoot}/release/Uninstall-JNCanvas.bat" -Force
+    }
 }
 
 Package
